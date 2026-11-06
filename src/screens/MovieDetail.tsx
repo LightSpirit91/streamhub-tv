@@ -2,7 +2,7 @@ import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, ExternalLink, Film, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
-import { CastRow, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
+import { CastRow, FreeOnButtons, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
 import type { Movie } from '../core/movies/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { Button } from '../ui/primitives';
@@ -39,7 +39,8 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
     ['Country', movie.country],
     ['Language', movie.language ?? (movie.country ? undefined : 'English')],
     ['Runtime', fmtMin(movie.minutes) ?? movie.runtime],
-    ['Video', movie.quality],
+    ['Released', movie.releaseDate ? new Date(`${movie.releaseDate}T12:00:00Z`).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : undefined],
+    ['Video', movie.source === 'free' ? undefined : movie.quality],
   ];
 
   return (
@@ -71,14 +72,15 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
             </View>
 
             <View style={styles.actions}>
-              <Button
+              {movie.source === 'free' ? <FreeOnButtons links={movie.freeOn} title={movie.title} preferredFocus /> : null}
+              {movie.source !== 'free' ? <Button
                 variant="primary"
                 label={resumeAt > 60 ? `Resume from ${fmt(resumeAt)}` : 'Play'}
                 icon={<Play size={18} color="#17110A" fill="#17110A" />}
                 onPress={() => onPlay(movie)}
                 preferredFocus
-              />
-              {resumeAt > 60 ? (
+              /> : null}
+              {resumeAt > 60 && movie.source !== 'free' ? (
                 <Button label="Start over" icon={<RotateCcw size={16} color={colors.text} />} onPress={() => onPlay(movie, true)} />
               ) : null}
               {trailerOf(movie) ? (
@@ -105,7 +107,7 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
             </View>
 
             <CastRow cast={movie.castPhotos} />
-            <WhereToWatch watch={movie.watch} />
+            {movie.source !== 'free' ? <WhereToWatch watch={movie.watch} /> : null}
             {canOpenLinks && (movie.imdbId || movie.wikipedia) ? (
               <View style={styles.links}>
                 {movie.imdbId ? (
@@ -129,7 +131,9 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
               </View>
             ) : null}
             <Text style={styles.source}>
-              {movie.source === 'youtube' ? 'Free from the official channel on YouTube.' : 'Free from the Internet Archive.'} Credits from Wikidata{movie.imdbRating ? ', rating from IMDb' : ''}.
+              {movie.source === 'free'
+                ? `Streams free${movie.freeOn?.some((l) => l.type === 'ads') ? ' with ads' : ''} in Canada; opens on ${movie.freeOn?.map((l) => l.name).join(' / ') ?? 'the service'}.`
+                : movie.source === 'youtube' ? 'Free from the official channel on YouTube.' : 'Free from the Internet Archive.'}{movie.source !== 'free' ? ' Credits from Wikidata' : ''}{movie.imdbRating ? `${movie.source === 'free' ? ' Rating' : ', rating'} from IMDb` : ''}.
             </Text>
             {movie.tmdbId ? <TmdbCredit /> : null}
           </View>

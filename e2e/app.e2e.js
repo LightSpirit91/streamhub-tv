@@ -40,9 +40,16 @@ async function run(b, name, viewport) {
   await step('Movies genre grid', async () => { await p.getByText('Western', { exact: true }).first().click(); await p.waitForTimeout(800); });
   await step('Shows page + episodes sheet + play + back', async () => {
     await tab('Shows'); await p.waitForTimeout(1500);
-    await p.getByText('Episodes', { exact: true }).first().click(); await p.waitForTimeout(600);
-    await p.getByRole('button', { name: /^(Play episode|Resume episode)/ }).first().click(); await p.waitForTimeout(1200);
-    await p.click('[aria-label="Back"]'); await p.waitForTimeout(400);
+    // The hero is either a series that plays here (Episodes) or one that streams free elsewhere (Details).
+    await p.getByRole('button', { name: /^(Episodes|Details)$/ }).first().click(); await p.waitForTimeout(600);
+    const play = p.getByRole('button', { name: /^(Play episode|Resume episode)/ });
+    if (await play.count()) {
+      await play.first().click(); await p.waitForTimeout(1200);
+      await p.click('[aria-label="Back"]'); await p.waitForTimeout(400);
+    } else {
+      await p.getByRole('button', { name: /^Watch free on / }).first().waitFor({ timeout: 3000 });
+      await p.click('[aria-label="Close"] >> nth=-1'); await p.waitForTimeout(300);
+    }
   });
   await step('My List shows the saved channel', async () => { await tab('My List'); await p.waitForSelector('text=Favorite Channels', { timeout: 5000 }); });
   await step('Search channels and movies', async () => { await tab('Search'); await p.fill('input', 'kan'); await p.waitForTimeout(800); await p.waitForSelector('text=channel', { timeout: 5000 }); });

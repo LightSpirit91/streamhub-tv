@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Film, Info, Play } from 'lucide-react-native';
 import type { Movie } from '../core/movies/types';
-import { DECADES, MOVIE_GENRES, WORLD_ROWS } from '../core/movies/types';
+import { DECADES, MOVIE_GENRES, WORLD_ROWS, byNewest } from '../core/movies/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { MovieCard } from '../components/MovieCard';
 import { Row } from '../components/Row';
@@ -28,7 +28,7 @@ const ratingOf = (m: Movie) => m.imdbRating || m.tmdbRating || 0;
 function sortMovies(list: Movie[], sort: Sort, minRating: number): Movie[] {
   const l = minRating ? list.filter((m) => ratingOf(m) >= minRating) : [...list];
   switch (sort) {
-    case 'newest': return l.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+    case 'newest': return l.sort(byNewest);
     case 'oldest': return l.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
     case 'best': return l.filter((m) => ratingOf(m) > 0).sort((a, b) => ratingOf(b) - ratingOf(a));
     case 'worst': return l.filter((m) => ratingOf(m) > 0).sort((a, b) => ratingOf(a) - ratingOf(b));
@@ -55,7 +55,7 @@ const decadeOf = (m: Movie) => (m.year ? Math.floor(m.year / 10) * 10 : undefine
 
 export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
   const upcoming = useStreamHub((s) => s.upcoming);
-  const [sort, setSort] = useState<Sort>('popular');
+  const [sort, setSort] = useState<Sort>('newest');
   const [minRating, setMinRating] = useState(0);
   const L = useLayout();
   const movies = useStreamHub((s) => s.movies);
@@ -90,6 +90,10 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
     const cutoff = Date.now() - 14 * 86_400_000;
     return movies.filter((m) => (m.addedAt ?? 0) > cutoff).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)).slice(0, 40);
   }, [movies]);
+  // Newest first: the latest releases, then what's popular among recent free titles.
+  const newest = useMemo(() => movies.filter((m) => m.year).sort(byNewest).slice(0, 40), [movies]);
+  const popularFree = useMemo(() => movies.filter((m) => m.source === 'free').slice(0, 30), [movies]);
+  const thisYear = new Date().getFullYear();
   const topRated = useMemo(
     () => movies.filter((m) => (m.imdbRating ?? 0) >= 7 && (m.imdbVotes ?? 0) >= 1000).sort((a, b) => (b.imdbRating ?? 0) - (a.imdbRating ?? 0)).slice(0, 40),
     [movies],
@@ -102,7 +106,12 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
     return { seed, list: movies.filter((m) => m.id !== seed.id && m.genres.includes(g)).slice(0, 30) };
   }, [cont, mine, movies]);
 
-  const heroes = useMemo(() => (cont[0] ? [cont[0], ...movies.slice(0, 4)] : movies.slice(0, 5)), [cont, movies]);
+  const heroes = useMemo(() => {
+    // Recent hits with artwork lead the hero; classics only when there are none.
+    const recent = movies.filter((m) => m.backdrop && (m.year ?? 0) >= thisYear - 2).slice(0, 5);
+    const pick = recent.length >= 3 ? recent : movies.slice(0, 5);
+    return cont[0] ? [cont[0], ...pick.slice(0, 4)] : pick;
+  }, [cont, movies, thisYear]);
   useEffect(() => {
     if (heroes.length < 2 || filter.kind !== 'home') return;
     const t = setInterval(() => setHeroIdx((i) => (i + 1) % heroes.length), 9000);
@@ -209,7 +218,7 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
         <LinearGradient colors={['rgba(28,23,25,0.3)', 'rgba(28,23,25,0.96)']} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroInner, L.compact && { flexDirection: 'column-reverse', alignItems: 'flex-start' }]}>
           <View style={{ flex: 1, gap: 12 }}>
-            <Text style={styles.overline}>{resume ? 'CONTINUE WATCHING' : `#${heroIdx + (cont[0] ? 0 : 1)} MOST WATCHED`}</Text>
+            <Text style={styles.overline}>{resume ? 'CONTINUE WATCHING' : (hero.year ?? 0) >= thisYear - 2 ? 'NEW RELEASE' : `#${heroIdx + (cont[0] ? 0 : 1)} MOST WATCHED`}</Text>
             <Text style={[styles.title, L.compact && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>{hero.title}</Text>
             <Text style={styles.meta}>
               {[hero.imdbRating ? `IMDb ${hero.imdbRating.toFixed(1)}` : null, hero.year, hero.minutes ? `${Math.floor(hero.minutes / 60)}h ${hero.minutes % 60}m` : hero.runtime, hero.genres.slice(0, 3).join(' · '), hero.language]
@@ -218,7 +227,7 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
             </Text>
             {!L.compact && hero.description ? <Text style={styles.desc} numberOfLines={3}>{hero.description}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
-              <Button variant="primary" label={resume ? 'Resume' : 'Play'} icon={<Play size={18} color="#17110A" fill="#17110A" />} onPress={() => onPlay(hero)} preferredFocus />
+              <Button variant="primary" label={hero.source === 'free' ? `Watch free on ${hero.freeOn?.[0]?.name ?? 'TV'}` : resume ? 'Resume' : 'Play'} icon={<Play size={18} color="#17110A" fill="#17110A" />} onPress={() => onPlay(hero)} preferredFocus />
               <Button label="Details" icon={<Info size={18} color={colors.text} />} onPress={() => onOpen(hero)} />
             </View>
             <View style={styles.dots}>
@@ -234,6 +243,8 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
       <View style={{ height: 22 }} />
       <Row title="Continue Watching" data={cont} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       <Row title="My Movies" data={mine} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
+      <Row title="New Releases" subtitle="latest first" accent={colors.coral} data={newest} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => { setSort('newest'); setFilter({ kind: 'all' }); }} />
+      <Row title="Popular Free Movies Right Now" subtitle="Tubi, Pluto TV, Roku and more" accent={colors.gold} data={popularFree} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       <Row
         title="Top 10 on StreamHub"
         accent={colors.gold}
@@ -276,7 +287,7 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
         <Row key={d} title={`The ${d}s`} subtitle={`${list.length}`} data={list.slice(0, 30)} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => setFilter({ kind: 'decade', value: d })} />
       ))}
       <Text style={[styles.note, { marginHorizontal: L.gutter }]}>
-        {movies.length.toLocaleString()} full-length films from the Internet Archive. Public domain and free to watch. New titles are added every night.
+        {movies.length.toLocaleString()} films. The newest movies streaming free in Canada (they open on Tubi, Pluto TV and others), films from official studio channels, and public-domain classics. New releases are added every night.
       </Text>
     </ScrollView>
   );

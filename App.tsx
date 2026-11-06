@@ -78,10 +78,12 @@ export default function App() {
 
   const playChannel = useCallback((channel: Channel, row: Channel[]) => setPlaying({ kind: 'live', channel, row }), []);
   const playEpisode = useCallback((show: Show, index: number) => {
+    if (!show.episodes.length) return setShowDetail(show); // free elsewhere: its page has the links
     setShowDetail(null);
     setPlaying({ kind: 'episode', show, index });
   }, []);
   const playMovie = useCallback((movie: Movie, fromStart?: boolean) => {
+    if (movie.source === 'free') return setDetail(movie); // free elsewhere: its page has the links
     setDetail(null);
     setPlaying({ kind: 'movie', movie, fromStart });
   }, []);

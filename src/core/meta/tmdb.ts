@@ -25,6 +25,35 @@ export interface WatchInfo {
   providers: Provider[];
 }
 
+/** A free (or free with ads) service where a title can be watched, with a link to it. */
+export interface FreeLink {
+  name: string;
+  logo?: string;
+  type: 'free' | 'ads';
+  url: string;
+}
+
+/** Services never offered (low-quality filler). */
+const SKIP_PROVIDERS = /plex|samsung/i;
+
+/** Direct search pages for services whose URL format is stable; others use the TMDB watch page. */
+const SEARCH_URL: [RegExp, (q: string) => string][] = [
+  [/^tubi/i, (q) => `https://tubitv.com/search/${encodeURIComponent(q)}`],
+];
+
+/** Free / free-with-ads places to watch, best first. Empty when there are none. */
+export function freeLinks(meta: TmdbMeta, title: string): FreeLink[] {
+  const fallback = meta.watch?.link ?? (meta.tmdbId ? `https://www.themoviedb.org/${meta.tmdbType ?? 'movie'}/${meta.tmdbId}/watch?locale=${TMDB_REGION}` : undefined);
+  const out: FreeLink[] = [];
+  for (const p of meta.watch?.providers ?? []) {
+    if ((p.type !== 'free' && p.type !== 'ads') || SKIP_PROVIDERS.test(p.name) || out.some((x) => x.name === p.name)) continue;
+    const direct = SEARCH_URL.find(([re]) => re.test(p.name))?.[1](title);
+    const url = direct ?? fallback;
+    if (url) out.push({ name: p.name, logo: p.logo, type: p.type, url });
+  }
+  return out;
+}
+
 /** Everything TMDB adds to a movie or a show. */
 export interface TmdbMeta {
   tmdbId?: number;

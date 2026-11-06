@@ -85,6 +85,8 @@ const tidyTitleForSearch = (t: string) => t.replace(/\s*\(.*?\)\s*/g, ' ').trim(
 
 async function enrich<T extends Item>(items: T[], type: 'movie' | 'tv'): Promise<{ looked: number; found: number }> {
   const now = Date.now();
+  // Free-to-stream titles (fresh-doctor) are complete already and re-checked weekly there.
+  items = items.filter((i) => i.source !== 'free');
   const todo = [
     ...items.filter((i) => !i.tmdbCheckedAt),
     // Unmatched titles get another try weekly (titles get cleaned up over time).

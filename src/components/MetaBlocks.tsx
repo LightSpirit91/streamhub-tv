@@ -1,7 +1,8 @@
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { User } from 'lucide-react-native';
-import type { CastMember, WatchInfo } from '../core/meta/tmdb';
+import { ExternalLink, Play, User } from 'lucide-react-native';
+import type { CastMember, FreeLink, WatchInfo } from '../core/meta/tmdb';
+import { Button } from '../ui/primitives';
 import { PROVIDER_LABEL } from '../core/meta/tmdb';
 import { colors, fonts } from '../ui/theme';
 
@@ -54,12 +55,45 @@ export function WhereToWatch({ watch }: { watch?: WatchInfo }) {
   );
 }
 
+/** Short label for a card or a button: "Tubi", "Pluto TV" ... */
+export const freeLabel = (links?: FreeLink[]) => (links?.length ? `Free on ${links[0].name}` : undefined);
+
+/**
+ * Titles that stream free (or free with ads) on another service: one button
+ * per service. On a TV there is no browser, so it says which app to open.
+ */
+export function FreeOnButtons({ links, title, preferredFocus }: { links?: FreeLink[]; title: string; preferredFocus?: boolean }) {
+  if (!links?.length) return null;
+  if (Platform.isTV) {
+    return (
+      <Text style={styles.tvHint}>
+        {`Free on ${links.map((l) => l.name).join(', ')}. Open the ${links[0].name} app and search “${title}”.`}
+      </Text>
+    );
+  }
+  return (
+    <>
+      {links.slice(0, 3).map((l, i) => (
+        <Button
+          key={l.name}
+          variant={i === 0 ? 'primary' : 'glass'}
+          label={`Watch free on ${l.name}`}
+          icon={i === 0 ? <Play size={18} color="#17110A" fill="#17110A" /> : <ExternalLink size={16} color={colors.text} />}
+          onPress={() => Linking.openURL(l.url)}
+          preferredFocus={preferredFocus && i === 0}
+        />
+      ))}
+    </>
+  );
+}
+
 export function TmdbCredit() {
   return <Text style={styles.credit}>Posters, cast and availability from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.</Text>;
 }
 
 const styles = StyleSheet.create({
   head: { color: colors.text, fontFamily: fonts.display, fontSize: 17 },
+  tvHint: { color: colors.ok, fontFamily: fonts.bodyBold, fontSize: 15, lineHeight: 22, flexBasis: '100%' },
   person: { width: 86, alignItems: 'center', gap: 6 },
   face: {
     width: 72, height: 72, borderRadius: 36, overflow: 'hidden', backgroundColor: colors.surface,

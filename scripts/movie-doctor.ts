@@ -177,7 +177,7 @@ async function main() {
   // Merge duplicate uploads of the same film, keep the most popular copy.
   const seen = new Map<string, Movie>();
   for (const m of [...library.values()].filter((x) => isWatchable(x)).sort((a, b) => b.popularity - a.popularity)) {
-    const key = titleKey(m.title);
+    const key = m.source === 'free' ? m.id : titleKey(m.title);
     const prev = seen.get(key);
     if (!prev) seen.set(key, m);
     else if (!prev.year && m.year) prev.year = m.year;

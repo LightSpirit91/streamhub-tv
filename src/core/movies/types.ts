@@ -1,4 +1,4 @@
-import type { TmdbMeta } from '../meta/tmdb';
+import type { FreeLink, TmdbMeta } from '../meta/tmdb';
 
 export interface Movie extends TmdbMeta {
   id: string;
@@ -25,7 +25,14 @@ export interface Movie extends TmdbMeta {
   cast?: string[];
   country?: string;
   wikipedia?: string;
-  source: 'archive' | 'youtube';
+  /** archive / youtube play inside StreamHub; free = watch free on a service like Tubi (opens there). */
+  source: 'archive' | 'youtube' | 'free';
+  /** Where a 'free' title streams (free or with ads), with links. */
+  freeOn?: FreeLink[];
+  /** Last time the free availability was checked (ms). */
+  freeCheckedAt?: number;
+  /** Release date (YYYY-MM-DD) when known; newest-first ordering uses it. */
+  releaseDate?: string;
   /** Popularity at the source, used for ordering. */
   popularity: number;
 }
@@ -60,3 +67,7 @@ export const DECADES = [1920, 1930, 1940, 1950, 1960, 1970, 1980, 1990, 2000, 20
 /** New films are only added when they were released in this year or later. */
 export const MIN_NEW_MOVIE_YEAR = 1990;
 export const newEnough = (year?: number): boolean => !!year && year >= MIN_NEW_MOVIE_YEAR;
+
+/** Newest first: release date, then year. */
+export const releaseKey = (m: { releaseDate?: string; year?: number }): string => m.releaseDate ?? (m.year ? `${m.year}-00-00` : '');
+export const byNewest = <T extends { releaseDate?: string; year?: number }>(a: T, b: T): number => releaseKey(b).localeCompare(releaseKey(a));

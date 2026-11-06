@@ -80,6 +80,8 @@ async function main() {
           if (!part) continue;
           const cur = shows.get(part.key);
           if (!cur) {
+            // Newest first: no new classic series once the library exists; known ones still get new episodes.
+            if (prev?.shows.length) continue;
             shows.set(part.key, { ...part.show, addedAt: prev ? now : undefined, episodes: part.episodes });
           } else {
             const have = new Set(cur.episodes.map((e) => e.id));
@@ -119,7 +121,7 @@ async function main() {
   console.log(OMDB_KEY ? `series ratings looked up: ${rated}` : 'series ratings: skipped (no OMDB_API_KEY secret)');
 
   // Keep YouTube shows from the previous build; youtube-doctor refreshes them.
-  const yt = (prev?.shows ?? []).filter((s) => s.source === 'youtube');
+  const yt = (prev?.shows ?? []).filter((s) => s.source === 'youtube' || s.source === 'free');
   const catalog: ShowCatalog = { version: 1, builtAt: now, shows: [...list, ...yt] };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'shows.json'), JSON.stringify(catalog));

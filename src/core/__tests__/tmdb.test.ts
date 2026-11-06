@@ -44,3 +44,29 @@ describe('tmdb', () => {
     expect(pickSearchHit(hits, 'Detour', 1970)).toBeUndefined();
   });
 });
+
+describe('free to stream', () => {
+  it('links free and with-ads services, never Plex or Samsung, Tubi straight to search', async () => {
+    const { freeLinks } = await import('../meta/tmdb');
+    const links = freeLinks({
+      tmdbId: 9, tmdbType: 'movie',
+      watch: {
+        link: 'https://www.themoviedb.org/movie/9/watch?locale=CA',
+        providers: [
+          { name: 'Plex', type: 'ads' }, { name: 'Tubi TV', type: 'ads' }, { name: 'Pluto TV', type: 'free' },
+          { name: 'Netflix', type: 'stream' }, { name: 'Samsung TV Plus', type: 'free' },
+        ],
+      },
+    }, 'Hard Boiled');
+    expect(links.map((l) => l.name)).toEqual(['Tubi TV', 'Pluto TV']);
+    expect(links[0].url).toBe('https://tubitv.com/search/Hard%20Boiled');
+    expect(links[1].url).toBe('https://www.themoviedb.org/movie/9/watch?locale=CA');
+    expect(freeLinks({ watch: { providers: [{ name: 'Netflix', type: 'stream' }] } }, 'X')).toEqual([]);
+  });
+
+  it('orders newest first by release date, then year', async () => {
+    const { byNewest } = await import('../movies/types');
+    const list = [{ year: 2019 }, { releaseDate: '2026-10-30', year: 2026 }, { releaseDate: '2026-11-05', year: 2026 }, { year: 2025 }];
+    expect(list.sort(byNewest)).toEqual([{ releaseDate: '2026-11-05', year: 2026 }, { releaseDate: '2026-10-30', year: 2026 }, { year: 2025 }, { year: 2019 }]);
+  });
+});
