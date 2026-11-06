@@ -144,6 +144,17 @@ describe('buildCatalog', () => {
   });
 });
 
+describe('language feeds', () => {
+  it('routes Russian-language channels from other countries into Russian TV', () => {
+    const c = buildCatalog([{
+      source: { id: 'iptv-org:language:rus', tag: 'lang:rus' },
+      entries: parseM3U('#EXTINF:-1 tvg-id="Inter.ua",Inter (576p)\nhttps://a.example.com/inter.m3u8\n'),
+    }]);
+    expect(c.channels[0].hubs).toContain('russian');
+    expect(c.channels[0].country).toBe('UA');
+  });
+});
+
 describe('classify', () => {
   it('maps Spanish-language US channels into Latin', () => {
     expect(classify({ name: 'Fox Deportes', country: 'US', categories: [] })).toEqual(

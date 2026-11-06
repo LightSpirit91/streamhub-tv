@@ -64,8 +64,8 @@ export function classify(ch: Pick<Channel, 'name' | 'country' | 'categories'>): 
   // Region hubs
   if (cc === 'US') hubs.add('usa');
   if (cc === 'CA') hubs.add('canada');
-  if (cc === 'RU' || RE.cyrillic.test(n)) hubs.add('russian');
-  if (cc === 'IL' || RE.hebrew.test(n)) hubs.add('israel');
+  if (cc === 'RU' || RE.cyrillic.test(n) || cats.includes('lang:rus')) hubs.add('russian');
+  if (cc === 'IL' || RE.hebrew.test(n) || cats.includes('lang:heb')) hubs.add('israel');
   if ((cc && LATAM_SET.has(cc)) || RE.latinName.test(n)) hubs.add('latin');
   // Israel's Channel 9 broadcasts in Russian.
   if (cc === 'IL' && /^(channel 9|9 канал|kanal 9)$/i.test(n)) hubs.add('russian');

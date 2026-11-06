@@ -7,7 +7,7 @@ export const CATALOG_VERSION = 1;
 const SPOTLIGHT_SIZE = 24;
 
 export interface SourceBatch {
-  source: Pick<PlaylistSource, 'id' | 'countryFilter'>;
+  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag'>;
   entries: PlaylistEntry[];
 }
 
@@ -31,6 +31,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
         .map((g) => g.toLowerCase())
         .filter((g) => g !== 'undefined' && g.length < 40);
       if (cats.some((c) => BLOCKED_CATEGORIES.has(c))) continue;
+      if (source.tag) cats.push(source.tag);
 
       const stream = toStream(e, info, source.id);
       if (!stream) continue;

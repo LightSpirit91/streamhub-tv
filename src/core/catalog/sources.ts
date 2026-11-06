@@ -25,6 +25,8 @@ export interface PlaylistSource {
   urls: string[];
   /** If set, entries whose country is not in this set are dropped. */
   countryFilter?: Set<string>;
+  /** Extra category stamped on every entry, e.g. 'lang:heb' -> Israel hub. */
+  tag?: string;
   /** Loaded only when the user opens "Explore All". */
   lazy?: boolean;
 }
@@ -88,6 +90,20 @@ export const SOURCES: PlaylistSource[] = [
   category('documentary', 'Documentary (worldwide)'),
   category('outdoor', 'Outdoor (worldwide)'),
   category('science', 'Science (worldwide)'),
+  // Language feeds catch Hebrew and Russian channels broadcast from other
+  // countries (Russian-language TV from Israel, Ukraine, Kazakhstan, Baltics...).
+  {
+    id: 'iptv-org:language:heb',
+    label: 'Hebrew-language (worldwide)',
+    urls: [`${IPTV_ORG}/languages/heb.m3u`],
+    tag: 'lang:heb',
+  },
+  {
+    id: 'iptv-org:language:rus',
+    label: 'Russian-language (worldwide)',
+    urls: [`${IPTV_ORG}/languages/rus.m3u`],
+    tag: 'lang:rus',
+  },
   {
     id: 'free-tv',
     label: 'Free-TV curated',
