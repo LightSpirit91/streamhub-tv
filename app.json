@@ -68,6 +68,9 @@
       ],
       "expo-localization"
     ],
-    "owner": "arkadiikr"
+    "owner": "arkadiikr",
+    "experiments": {
+      "baseUrl": "/streamhub-tv"
+    }
   }
 }

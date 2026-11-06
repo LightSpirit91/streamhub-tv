@@ -1,0 +1,48 @@
+# Publishes the web version to https://lightspirit91.github.io/streamhub-tv/
+# on every push. Watch on any Mac, PC, iPhone or tablet browser.
+name: Web app
+
+on:
+  push:
+    branches: [claude/iptv-live-tv-app-8bs41s, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - run: npx expo export --platform web --output-dir web-dist
+      - run: cp web-dist/index.html web-dist/404.html
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
