@@ -4,7 +4,7 @@
  *
  * Guide sources (public XMLTV):
  * - epgshare01.online: per-country guides (US, Canada, Israel, Mexico, Latin America, sports...)
- * - i.mjh.nz: Pluto TV, Samsung TV Plus, Plex and Roku free-channel guides
+ * - i.mjh.nz: Pluto TV and Roku free-channel guides
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,15 +22,12 @@ const HOURS = Number(arg('--hours', '18'));
 
 const EPGSHARE = 'https://epgshare01.online/epgshare01';
 /** Guide files we want, by prefix. Read from the folder listing each night, so renames (US1 -> US2) never break the guide. */
-const WANT = /^epg_ripper_(US\d|US_LOCALS\d|US_SPORTS\d|CA\d|IL\d|RU\d|KZ\d|UA\d|viva-russia\.ru|MX\d|AR\d|CO\d|CL\d|PE\d|CR\d|DO\d|EC\d|PA\d|UY\d|SV\d|UK\d|PLEX\d|DISTROTV\d|RAKUTEN\d|PEACOCK\d|AMCCHANNELS\d|WHALETVPLUS\d|TBNPLUS\d|DIRECTVSPORTS\d|BEIN\d|RALLY_TV\d)\.xml\.gz$/;
-const FALLBACK = ['US2', 'US_LOCALS1', 'US_SPORTS1', 'CA2', 'IL1', 'viva-russia.ru', 'MX1', 'CO1', 'UK1', 'PLEX1'].map((f) => `epg_ripper_${f}.xml.gz`);
+const WANT = /^epg_ripper_(US\d|US_LOCALS\d|US_SPORTS\d|CA\d|IL\d|RU\d|KZ\d|UA\d|viva-russia\.ru|MX\d|AR\d|CO\d|CL\d|PE\d|CR\d|DO\d|EC\d|PA\d|UY\d|SV\d|UK\d|DISTROTV\d|RAKUTEN\d|PEACOCK\d|AMCCHANNELS\d|WHALETVPLUS\d|TBNPLUS\d|DIRECTVSPORTS\d|BEIN\d|RALLY_TV\d)\.xml\.gz$/;
+const FALLBACK = ['US2', 'US_LOCALS1', 'US_SPORTS1', 'CA2', 'IL1', 'viva-russia.ru', 'MX1', 'CO1', 'UK1'].map((f) => `epg_ripper_${f}.xml.gz`);
 const MJH = [
   'https://i.mjh.nz/PlutoTV/us.xml.gz',
   'https://i.mjh.nz/PlutoTV/ca.xml.gz',
   'https://i.mjh.nz/PlutoTV/mx.xml.gz',
-  'https://i.mjh.nz/SamsungTVPlus/us.xml.gz',
-  'https://i.mjh.nz/SamsungTVPlus/ca.xml.gz',
-  'https://i.mjh.nz/Plex/us.xml.gz',
   'https://i.mjh.nz/Roku/all.xml.gz',
 ];
 

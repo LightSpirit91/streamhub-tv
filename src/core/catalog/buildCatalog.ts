@@ -1,5 +1,5 @@
 import type { Catalog, Channel, HubId, PlaylistEntry, StreamHealth } from '../types';
-import { channelKey, countryFromTvgId, parseName, toStream } from './normalize';
+import { channelKey, countryFromTvgId, isBannedStream, parseName, toStream } from './normalize';
 import { classify, popularity, spotlightScore } from './hubs';
 import { BLOCKED_CATEGORIES, type PlaylistSource } from './sources';
 
@@ -32,7 +32,7 @@ function mergeSameName(map: Map<string, Channel>) {
 const SPOTLIGHT_SIZE = 24;
 
 export interface SourceBatch {
-  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag' | 'country' | 'byName'>;
+  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag' | 'country' | 'byName' | 'deny'>;
   entries: PlaylistEntry[];
 }
 
@@ -45,8 +45,11 @@ export interface SourceBatch {
  */
 export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog {
   const map = new Map<string, Channel>();
+  // Block lists (Samsung TV Plus, Plex): their URLs are removed everywhere.
+  const denied = new Set(batches.filter((b) => b.source.deny).flatMap((b) => b.entries.map((e) => e.url)));
 
   for (const { source, entries } of batches) {
+    if (source.deny) continue;
     // "iptv-org:raw:ca_pluto" -> CA. Used when an entry has no tvg-id, so a
     // channel from the Pluto TV Canada lineup is labelled Canada, not unknown.
     const sourceCountry = /^iptv-org:(?:country|raw):([a-z]{2})(?:_|$)/.exec(source.id)?.[1].toUpperCase();
@@ -64,8 +67,9 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
       if (cats.some((c) => BLOCKED_CATEGORIES.has(c))) continue;
       if (source.tag) cats.push(source.tag);
 
+      if (denied.has(e.url)) continue;
       const stream = toStream(e, info, source.id);
-      if (!stream) continue;
+      if (!stream || isBannedStream(stream)) continue;
 
       // The same free (FAST) channel ships in Pluto/Samsung/Roku lineups for
       // several countries without a tvg-id. Merge them into one channel whose
@@ -98,7 +102,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
   }
 
   mergeSameName(map);
-  const channels = [...map.values()];
+  const channels = [...map.values()].filter((c) => c.streams.length);
   for (const ch of channels) finalizeChannel(ch);
   assignSpotlight(channels);
   channels.sort(byRank);
@@ -106,7 +110,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
   return {
     version: CATALOG_VERSION,
     builtAt: now,
-    sources: batches.map((b) => b.source.id),
+    sources: batches.filter((b) => !b.source.deny).map((b) => b.source.id),
     channels,
   };
 }
@@ -180,6 +184,17 @@ export function applyHealth(
       .sort((a, b) => b.score - a.score);
     if (streams.length && dead === streams.length) continue;
     out.push(streams === ch.streams ? ch : { ...ch, streams });
+  }
+  return out;
+}
+
+/** Drops banned streams (YouTube, Samsung TV Plus, Plex) from an already built catalog. */
+export function withoutBanned(channels: Channel[]): Channel[] {
+  const out: Channel[] = [];
+  for (const ch of channels) {
+    const streams = ch.streams.filter((s) => !isBannedStream(s));
+    if (!streams.length) continue;
+    out.push(streams.length === ch.streams.length ? ch : { ...ch, streams });
   }
   return out;
 }

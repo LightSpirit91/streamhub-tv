@@ -56,3 +56,7 @@ export const WORLD_ROWS: { language: string; title: string }[] = [
 ];
 
 export const DECADES = [1920, 1930, 1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010];
+
+/** New films are only added when they were released in this year or later. */
+export const MIN_NEW_MOVIE_YEAR = 1990;
+export const newEnough = (year?: number): boolean => !!year && year >= MIN_NEW_MOVIE_YEAR;

@@ -5,6 +5,8 @@
  *   library only grows.
  * - New arrivals: also scans the newest uploads every night, stamped with
  *   addedAt for the "New on StreamHub" row.
+ * - Only films released 1990 or later are added (with an open license).
+ *   Titles already in the library stay.
  * - Incremental: only titles we have never seen cost a metadata request.
  * - Credits from Wikidata (director, cast, country, IMDb id, Wikipedia).
  * - IMDb ratings from OMDb when the OMDB_API_KEY secret is set
@@ -15,11 +17,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  imdbIdFrom, isWatchable, metadataUrl, runtimeMinutes, searchUrl, titleKey, toMovie,
+  imdbIdFrom, isWatchable, metadataUrl, openLicense, runtimeMinutes, searchUrl, titleKey, toMovie,
   type ArchiveFile, type SearchDoc,
 } from '../src/core/movies/archive';
 import { creditsQuery, parseCredits } from '../src/core/movies/wikidata';
-import type { Movie, MovieCatalog } from '../src/core/movies/types';
+import { MIN_NEW_MOVIE_YEAR, newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -60,7 +62,7 @@ async function omdb<T>(query: string): Promise<T> {
 async function search(sort: string, max: number): Promise<SearchDoc[]> {
   const docs: SearchDoc[] = [];
   for (let page = 1; docs.length < max; page++) {
-    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(1000, max), page, sort));
+    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(1000, max), page, sort, MIN_NEW_MOVIE_YEAR));
     if (!r.response.docs.length) break;
     docs.push(...r.response.docs);
   }
@@ -106,7 +108,10 @@ async function main() {
       const meta = await json<{ files?: ArchiveFile[]; metadata?: Record<string, unknown> }>(metadataUrl(d.identifier));
       const md = meta.metadata ?? {};
       const m = toMovie({ ...d, runtime: d.runtime ?? (md.runtime as string | undefined) }, meta.files ?? []);
-      if (!m) return;
+      // New films: released 1990 or later, and only with an open license
+      // (Creative Commons / public domain) since they are not old enough to be
+      // public domain by age.
+      if (!m || !newEnough(m.year) || !openLicense(md.licenseurl)) return;
       if (previous.length && newestIds.has(m.id)) m.addedAt = now; // genuinely new uploads only
       m.imdbId = imdbIdFrom(md['external-identifier']) ?? imdbIdFrom(md.imdb);
       m.minutes ??= runtimeMinutes(md.runtime as string | undefined);

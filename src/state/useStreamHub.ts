@@ -3,7 +3,7 @@ import type { Channel, StreamHealth } from '../core/types';
 import type { Movie, MovieCatalog } from '../core/movies/types';
 import { getCatalog, readCachedCatalog } from '../core/catalog/cache';
 import { loadCatalog, fetchText } from '../core/catalog/loader';
-import { applyHealth } from '../core/catalog/buildCatalog';
+import { applyHealth, withoutBanned } from '../core/catalog/buildCatalog';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
 import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL, STREAMHUB_UPCOMING_URL } from '../core/catalog/sources';
@@ -81,7 +81,7 @@ interface StreamHubState extends ProfileData {
 }
 
 function prepare(channels: Channel[], health: Record<string, StreamHealth>) {
-  const list = applyHealth(channelsForDevice(channels, device), health);
+  const list = applyHealth(channelsForDevice(withoutBanned(channels), device), health);
   return { channels: list, byId: new Map(list.map((c) => [c.id, c])) };
 }
 

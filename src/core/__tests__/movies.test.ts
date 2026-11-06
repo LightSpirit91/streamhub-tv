@@ -132,3 +132,18 @@ describe('studio titles and genres', () => {
     expect(genresFromTmdb([])).toBeUndefined();
   });
 });
+
+describe('new movies rule', () => {
+  it('adds only films from 1990 on, with an open license', async () => {
+    const { newEnough } = await import('../movies/types');
+    const { openLicense, searchUrl } = await import('../movies/archive');
+    expect(newEnough(1989)).toBe(false);
+    expect(newEnough(undefined)).toBe(false);
+    expect(newEnough(1990)).toBe(true);
+    expect(newEnough(2024)).toBe(true);
+    expect(openLicense('http://creativecommons.org/licenses/by-nc-nd/4.0/')).toBe(true);
+    expect(openLicense('https://creativecommons.org/publicdomain/mark/1.0/')).toBe(true);
+    expect(openLicense(undefined)).toBe(false);
+    expect(decodeURIComponent(searchUrl(10, 1, 'addeddate desc', 1990))).toContain('year:[1990 TO 2100]');
+  });
+});

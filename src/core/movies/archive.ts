@@ -10,8 +10,8 @@ export const ARCHIVE_COLLECTIONS = [
   'Western_Films', 'Horror_Films', 'Mystery_Films', 'Musical_Films', 'War_Films', 'documentaryandshortfilms',
 ];
 
-export function searchUrl(rows: number, page = 1, sort = 'downloads desc'): string {
-  const q = `collection:(${ARCHIVE_COLLECTIONS.join(' OR ')}) AND mediatype:movies`;
+export function searchUrl(rows: number, page = 1, sort = 'downloads desc', minYear?: number): string {
+  const q = `collection:(${ARCHIVE_COLLECTIONS.join(' OR ')}) AND mediatype:movies${minYear ? ` AND year:[${minYear} TO 2100]` : ''}`;
   const fl = ['identifier', 'title', 'year', 'downloads', 'subject', 'description', 'runtime', 'language', 'collection'];
   const params = [
     `q=${encodeURIComponent(q)}`,
@@ -23,6 +23,10 @@ export function searchUrl(rows: number, page = 1, sort = 'downloads desc'): stri
   ];
   return `https://archive.org/advancedsearch.php?${params.join('&')}`;
 }
+
+/** Free to share: Creative Commons or public-domain mark set by the uploader. */
+export const openLicense = (url: unknown): boolean =>
+  typeof url === 'string' && /creativecommons\.org\/(licenses|publicdomain)\//i.test(url);
 
 export const metadataUrl = (id: string) => `https://archive.org/metadata/${encodeURIComponent(id)}`;
 export const posterUrl = (id: string) => `https://archive.org/services/img/${encodeURIComponent(id)}`;

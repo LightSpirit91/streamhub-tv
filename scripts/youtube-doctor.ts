@@ -11,9 +11,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Movie, MovieCatalog } from '../src/core/movies/types';
-import type { Catalog, Channel } from '../src/core/types';
-import { finalizeChannel } from '../src/core/catalog/buildCatalog';
+import { newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
 import type { Show, ShowCatalog } from '../src/core/shows/types';
 import { genresFrom, isWatchable, cleanText, stripEmoji } from '../src/core/movies/archive';
 import { isFilmTitle, tidyTitle } from '../src/core/movies/youtube';
@@ -58,13 +56,6 @@ export const YT_SOURCES: Source[] = [
 ];
 
 /** Official 24/7 live streams (animal cams, space) added as live channels. */
-const YT_LIVE: { query: string; expect: RegExp; hub: 'wildlife' | 'docs'; country: string; tagline: string }[] = [
-  { query: 'explore.org live cams', expect: /explore/i, hub: 'wildlife', country: 'US', tagline: 'Live animal cams · Explore.org' },
-  { query: 'Cornell Lab Bird Cams', expect: /cornell|bird cams/i, hub: 'wildlife', country: 'US', tagline: 'Live bird cams · Cornell Lab' },
-  { query: 'Monterey Bay Aquarium', expect: /monterey bay aquarium/i, hub: 'wildlife', country: 'US', tagline: 'Live ocean cams · Monterey Bay Aquarium' },
-  { query: 'NASA', expect: /^NASA$/i, hub: 'docs', country: 'US', tagline: 'Live from space · NASA' },
-];
-
 const minutesOf = (iso: string) => {
   const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso);
   return m ? (+(m[1] ?? 0)) * 60 + (+(m[2] ?? 0)) + Math.round(+(m[3] ?? 0) / 60) : 0;
@@ -188,6 +179,8 @@ async function main() {
             const title = tidy(v.snippet.title);
             if (!title || !isWatchable({ title, description: v.snippet.description })) continue;
             const year = Number(/\b(19[3-9]\d|20[0-2]\d)\b/.exec(`${v.snippet.title} ${v.snippet.description.slice(0, 300)}`)?.[1]) || undefined;
+            // New films only when released 1990 or later (titles already in the library stay).
+            if (!knownMovies.has(id) && !newEnough(year)) continue;
             const m: Movie = {
               id, title, year, genres: genresFrom(v.snippet.description, title), description: cleanText(v.snippet.description),
               poster: thumb(v.snippet), url: embed(v.id), minutes: v.minutes, language: src.language === 'English' ? undefined : src.language,
@@ -227,40 +220,6 @@ async function main() {
       cur.popularity += sh.popularity;
     }
   }
-  // Live cams: refreshed every night (live streams come and go).
-  let liveCount = 0;
-  try {
-    const catFile = join(OUT, 'catalog.json');
-    if (existsSync(catFile)) {
-      const cat = JSON.parse(readFileSync(catFile, 'utf8')) as Catalog;
-      cat.channels = cat.channels.filter((c) => !c.id.startsWith('ytlive:'));
-      for (const src of YT_LIVE) {
-        const cid = await resolveChannel({ query: src.query, expect: src.expect, language: 'English', country: src.country, kind: 'shows' }, cache);
-        if (!cid) continue;
-        const r = await yt<{ items: { id: { videoId: string }; snippet: Snip & { channelTitle: string } }[] }>('search', {
-          part: 'snippet', channelId: cid, eventType: 'live', type: 'video', maxResults: '25',
-        });
-        for (const it of r.items) {
-          const name = tidyTitle(stripEmoji(it.snippet.title)).slice(0, 70);
-          if (!name || !isWatchable({ title: name })) continue;
-          const ch: Channel = {
-            id: `ytlive:${it.id.videoId}`, name, logo: thumb(it.snippet), thumb: thumb(it.snippet), country: src.country,
-            categories: [src.hub === 'wildlife' ? 'outdoor' : 'science'], hubs: [], tagline: src.tagline, network: it.snippet.channelTitle,
-            streams: [{ url: embed(it.id.videoId), height: 1080, geoBlocked: false, notAlwaysOn: false, trust: 'official', format: 'youtube', source: 'youtube-live', score: 80 }],
-            popularity: 0, bestHeight: 1080, search: '', addedAt: Date.now(),
-          };
-          finalizeChannel(ch);
-          if (!ch.hubs.includes(src.hub)) ch.hubs.push(src.hub);
-          cat.channels.push(ch);
-          liveCount++;
-        }
-      }
-      writeFileSync(catFile, JSON.stringify(cat));
-    }
-  } catch (e) {
-    log.push(`- live cams: error ${(e as Error).message.slice(0, 100)}`);
-  }
-  log.push(`- live cams and space: ${liveCount} live channels`);
 
   movies.movies = [...films.values()].sort((a, b) => b.popularity - a.popularity);
   shows.shows = [...series.values()].sort((a, b) => b.popularity - a.popularity);

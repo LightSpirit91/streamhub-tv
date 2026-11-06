@@ -39,6 +39,8 @@ export interface PlaylistSource {
   byName?: boolean;
   /** Playlist format. Default m3u. */
   format?: 'm3u' | 'famelack';
+  /** Block list: every stream URL in this playlist is removed from all other sources. */
+  deny?: boolean;
   /** Loaded only when the user opens "Explore All". */
   lazy?: boolean;
 }
@@ -55,11 +57,11 @@ export const PROFILE_COUNTRIES = new Set<string>([
 
 /** iptv-org splits big countries into provider files on the raw mirror. */
 const RAW_PROVIDER_FILES: Record<string, string[]> = {
-  us: ['us', 'us_pluto', 'us_samsung', 'us_roku', 'us_plex', 'us_tubi', 'us_xumo', 'us_stirr', 'us_local', 'us_firetv', 'us_pbs', 'us_cbsn', 'us_abcnews', 'us_canelatv', 'us_distro', 'us_vizio', 'us_tcl', 'us_sofast'],
-  ca: ['ca', 'ca_pluto', 'ca_samsung', 'ca_stingray'],
+  us: ['us', 'us_pluto', 'us_roku', 'us_tubi', 'us_xumo', 'us_stirr', 'us_local', 'us_firetv', 'us_pbs', 'us_cbsn', 'us_abcnews', 'us_canelatv', 'us_distro', 'us_vizio', 'us_tcl', 'us_sofast'],
+  ca: ['ca', 'ca_pluto', 'ca_stingray'],
   ru: ['ru', 'ru_smotrim', 'ru_ntv', 'ru_rt', 'ru_tvteleport', 'ru_televizor24', 'ru_zabava'],
   il: ['il'],
-  mx: ['mx', 'mx_pluto', 'mx_samsung', 'mx_multimedios'],
+  mx: ['mx', 'mx_pluto', 'mx_multimedios'],
 };
 
 function country(cc: string, label: string): PlaylistSource[] {
@@ -136,20 +138,33 @@ export const SOURCES: PlaylistSource[] = [
     format: 'famelack' as const,
   })),
   // Free ad-supported lineups (official streams), via Matt Huisman's public
-  // playlists: full Plex, Roku, Pluto TV (incl. Pluto TV Latino) and
-  // Samsung TV Plus lineups with their own channel guides.
+  // playlists: The Roku Channel and Pluto TV (incl. Pluto TV Latino).
   ...(
     [
-      ['plex', 'us', 'US'], ['plex', 'ca', 'CA'], ['roku', 'all', 'US'],
-      ['pluto', 'us', 'US'], ['pluto', 'ca', 'CA'], ['pluto', 'mx', 'MX'], ['pluto', 'ar', 'AR'], ['pluto', 'cl', 'CL'],
-      ['pluto', 'co', 'CO'], ['pluto', 'pe', 'PE'], ['samsung', 'us', 'US'], ['samsung', 'ca', 'CA'], ['samsung', 'mx', 'MX'],
+      ['roku', 'all', 'US'], ['pluto', 'us', 'US'], ['pluto', 'ca', 'CA'], ['pluto', 'mx', 'MX'], ['pluto', 'ar', 'AR'],
+      ['pluto', 'cl', 'CL'], ['pluto', 'co', 'CO'], ['pluto', 'pe', 'PE'],
     ] as const
   ).map(([svc, region, cc]) => ({
     id: `mjh:${region}_${svc}`,
-    label: `${svc === 'pluto' ? 'Pluto TV' : svc === 'samsung' ? 'Samsung TV Plus' : svc === 'plex' ? 'Plex' : 'The Roku Channel'} ${region.toUpperCase()}`,
-    urls: [`https://i.mjh.nz/${svc === 'pluto' ? 'PlutoTV' : svc === 'samsung' ? 'SamsungTVPlus' : svc === 'plex' ? 'Plex' : 'Roku'}/${region}.m3u8`],
+    label: `${svc === 'pluto' ? 'Pluto TV' : 'The Roku Channel'} ${region.toUpperCase()}`,
+    urls: [`https://i.mjh.nz/${svc === 'pluto' ? 'PlutoTV' : 'Roku'}/${region}.m3u8`],
     country: cc,
     byName: true,
+  })),
+  // Samsung TV Plus and Plex are not shown. Their lineups are loaded only as
+  // block lists: the same filler streams also appear inside the big country
+  // playlists under other hosts, and this removes them there too.
+  ...['us_samsung', 'ca_samsung', 'mx_samsung', 'us_plex'].map((file) => ({
+    id: `deny:${file}`,
+    label: `Blocked: ${file}`,
+    urls: [`${IPTV_ORG_RAW}/${file}.m3u`],
+    deny: true,
+  })),
+  ...['SamsungTVPlus/us', 'SamsungTVPlus/ca', 'SamsungTVPlus/mx', 'Plex/us', 'Plex/ca'].map((path) => ({
+    id: `deny:mjh:${path}`,
+    label: `Blocked: ${path}`,
+    urls: [`https://i.mjh.nz/${path}.m3u8`],
+    deny: true,
   })),
   {
     id: 'iptv-org:index',

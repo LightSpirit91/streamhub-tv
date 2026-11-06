@@ -37,6 +37,18 @@ const OFFICIAL_SOURCE_FILES = /_(pluto|samsung|roku|plex|tubi|xumo|stirr|stingra
 
 const IPV4_HOST = /^\d{1,3}(\.\d{1,3}){3}$/;
 
+/**
+ * Streams never listed: YouTube embeds (can't be cast, not real TV) and
+ * Samsung TV Plus / Plex filler channels.
+ */
+export function isBannedStream(s: { url: string; format?: string; source?: string }): boolean {
+  if (s.format === 'youtube' || youtubeId(s.url) || /(^|\.)(youtube(-nocookie)?\.com|youtu\.be)$/.test(hostOf(s.url))) return true;
+  if (s.source && (/_(samsung|plex)$/.test(s.source) || s.source === 'youtube-live')) return true;
+  const host = hostOf(s.url);
+  if (/samsung/.test(host) || /(^|[.-])plex([.-]|$)/.test(host)) return true;
+  return /jmp2\.uk\/(sam|plex|plx)-|i\.mjh\.nz\/(SamsungTVPlus|Plex)\//i.test(s.url);
+}
+
 export function hostOf(url: string): string {
   const m = /^https?:\/\/([^/:?#]+)/i.exec(url);
   return m ? m[1].toLowerCase() : '';

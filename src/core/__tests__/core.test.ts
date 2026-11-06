@@ -293,10 +293,34 @@ describe('famelack + youtube', () => {
     ]));
     expect(entries).toHaveLength(2);
     const c = buildCatalog([{ source: { id: 'famelack:us' }, entries }]);
-    const bob = c.channels.find((x) => x.name === 'Bob Ross')!;
-    expect(bob.streams[0].format).toBe('youtube');
-    expect(bob.streams[0].trust).toBe('official');
+    // YouTube streams are never listed as live channels.
+    expect(c.channels.find((x) => x.name === 'Bob Ross')).toBeUndefined();
     expect(c.channels.find((x) => x.name === 'Kan 11')!.streams[0].geoBlocked).toBe(true);
+  });
+});
+
+describe('blocked streams', () => {
+  it('drops Samsung TV Plus and Plex streams everywhere, keeps the rest', async () => {
+    const { isBannedStream } = await import('../catalog/normalize');
+    const { withoutBanned } = await import('../catalog/buildCatalog');
+    expect(isBannedStream({ url: 'https://drybar-1-ca.samsung.wurl.tv/playlist.m3u8' })).toBe(true);
+    expect(isBannedStream({ url: 'https://yahoo-plex.amagi.tv/playlist.m3u8' })).toBe(true);
+    expect(isBannedStream({ url: 'https://jmp2.uk/sam-USBD123.m3u8' })).toBe(true);
+    expect(isBannedStream({ url: 'https://www.youtube-nocookie.com/embed/wMghm5USzOY' })).toBe(true);
+    expect(isBannedStream({ url: 'https://x.example/a.m3u8', source: 'iptv-org:raw:us_samsung' })).toBe(true);
+    expect(isBannedStream({ url: 'https://jmp2.uk/plu-5f1234.m3u8' })).toBe(false);
+    expect(isBannedStream({ url: 'https://cdn.example/multiplex/live.m3u8' })).toBe(false);
+
+    const e = (name: string, url: string) => ({ name, url, groups: [] as string[], attrs: {} });
+    const c = buildCatalog([
+      { source: { id: 'deny:us_samsung', deny: true }, entries: [e('Filler TV', 'https://ads.its-newid.net/filler.m3u8')] },
+      { source: { id: 'iptv-org:country:us' }, entries: [e('Filler TV', 'https://ads.its-newid.net/filler.m3u8'), e('CBS News', 'https://cbsn.example/live.m3u8')] },
+    ]);
+    expect(c.channels.map((x) => x.name)).toEqual(['CBS News']);
+    expect(c.sources).toEqual(['iptv-org:country:us']);
+
+    const cached = [{ ...c.channels[0], id: 'old', streams: [{ ...c.channels[0].streams[0], url: 'https://www.youtube-nocookie.com/embed/abcdefghijk', format: 'youtube' as const }] }];
+    expect(withoutBanned([...cached, c.channels[0]]).map((x) => x.id)).toEqual([c.channels[0].id]);
   });
 });
 

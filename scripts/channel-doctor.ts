@@ -23,7 +23,7 @@ import { parseCsv } from '../src/core/csv';
 import { enrichChannels, type DbChannel, type DbLogo } from '../src/core/catalog/enrich';
 import { updateGraveyard, type Graveyard } from '../src/core/catalog/graveyard';
 import { existsSync, readFileSync } from 'node:fs';
-import { youtubeId } from '../src/core/catalog/normalize';
+import { isBannedStream, youtubeId } from '../src/core/catalog/normalize';
 
 const DB = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 
@@ -106,7 +106,7 @@ async function main() {
     onProgress: (d, t, id) => process.stdout.write(`\r  sources ${d}/${t} ${id.padEnd(40)}`),
   });
   process.stdout.write('\n');
-  for (const s of SOURCES) if (!s.lazy && !catalog.sources.includes(s.id)) failed.push(s.id);
+  for (const s of SOURCES) if (!s.lazy && !s.deny && !catalog.sources.includes(s.id)) failed.push(s.id);
 
   const enriched = await enrich(catalog.channels);
   // "Just Added": channels we have never listed before get today's date;
@@ -134,7 +134,8 @@ async function main() {
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
     // Remember what went offline; revive what came back.
     // Live cams are refreshed nightly by youtube-doctor; they never count as 'died'.
-    const before = (readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? []).filter((c) => !c.id.startsWith('ytlive:'));
+    // Channels removed on purpose (YouTube, Samsung TV Plus, Plex) are not 'offline'; they are not remembered.
+    const before = (readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? []).filter((c) => !c.id.startsWith('ytlive:') && !c.streams.every((s) => isBannedStream(s)));
     const g = updateGraveyard(readJson<Graveyard>(`${PREV}/graveyard.json`), before, listed, catalog.channels);
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, 'graveyard.json'), JSON.stringify(g.graveyard));
@@ -157,7 +158,7 @@ async function main() {
     `- With logo: ${catalog.channels.filter((c) => c.logo).length} · with description: ${catalog.channels.filter((c) => c.tagline).length} (database matched ${enriched.logos} logos)`,
     `- Streams: ${catalog.channels.reduce((n, c) => n + c.streams.length, 0)}`,
     `- 4K: ${q(2160)} · 1080p+: ${q(1080)} · 720p+: ${q(720)}`,
-    `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy).length}`,
+    `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy && !s.deny).length}`,
     failed.length ? `- Sources unreachable: ${failed.join(', ')}` : '',
     tally ? `- Probe: ${tally.ok} ok, ${tally.locked} geo-locked (kept), ${tally.timeout} timeout (kept), ${tally.dead} dead (removed)` : '- Probe: skipped',
     tally ? `- Graveyard: ${grave.died.length} went offline tonight, ${grave.revived.length} came back to life, ${grave.size} remembered` : '',
