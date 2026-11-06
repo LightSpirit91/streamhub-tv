@@ -30,3 +30,14 @@ describe('classic TV shows', () => {
     expect(p.episodes[1]).toMatchObject({ season: 1, episode: 2 });
   });
 });
+
+describe('classic TV only', () => {
+  it('rejects modern series that slipped into uploads', async () => {
+    const { isClassicShow } = await import('../shows/archive');
+    expect(isClassicShow('Bonanza', 1959)).toBe(true);
+    expect(isClassicShow('Malcolm in the Middle (The Complete Series)')).toBe(false);
+    expect(isClassicShow('Final Space Complete Season 1-3 (2018-2021)')).toBe(false);
+    expect(isClassicShow('Hazbin Hotel', 2024)).toBe(false);
+    expect(isClassicShow('Some Show', undefined, 'Aired 2019 on cable')).toBe(false);
+  });
+});

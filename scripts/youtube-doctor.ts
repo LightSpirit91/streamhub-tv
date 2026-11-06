@@ -31,15 +31,17 @@ interface Source {
   country: string;
   /** What this channel publishes. */
   kind: 'movies' | 'shows' | 'both';
+  /** Skip anything older than this year when a year can be detected. */
+  minYear?: number;
 }
 
 export const YT_SOURCES: Source[] = [
   // Israel
-  { query: 'כאן ארכיון', expect: /ארכיון|archive/i, language: 'Hebrew', country: 'Israel', kind: 'both' },
-  { query: 'ארכיון הסרטים הישראלי סינמטק ירושלים', expect: /סינמטק|cinematheque|film archive/i, language: 'Hebrew', country: 'Israel', kind: 'movies' },
-  { query: 'Steven Spielberg Jewish Film Archive', expect: /spielberg/i, language: 'Hebrew', country: 'Israel', kind: 'movies' },
-  { query: 'כאן חינוכית', expect: /חינוכית|educational/i, language: 'Hebrew', country: 'Israel', kind: 'shows' },
-  { query: 'כאן 11 תאגיד השידור', expect: /כאן|kan/i, language: 'Hebrew', country: 'Israel', kind: 'shows' },
+  { query: 'כאן ארכיון', expect: /ארכיון|archive/i, language: 'Hebrew', country: 'Israel', kind: 'both', minYear: 1960 },
+  { query: 'ארכיון הסרטים הישראלי סינמטק ירושלים', expect: /סינמטק|cinematheque|film archive/i, language: 'Hebrew', country: 'Israel', kind: 'both', minYear: 1960 },
+  { query: 'Steven Spielberg Jewish Film Archive', expect: /spielberg/i, language: 'Hebrew', country: 'Israel', kind: 'movies', minYear: 1960 },
+  { query: 'כאן חינוכית', expect: /חינוכית|educational/i, language: 'Hebrew', country: 'Israel', kind: 'shows', minYear: 1960 },
+  { query: 'כאן 11 תאגיד השידור', expect: /כאן|kan/i, language: 'Hebrew', country: 'Israel', kind: 'both', minYear: 1960 },
   // Russia / USSR
   { query: 'Мосфильм', expect: /мосфильм|mosfilm/i, language: 'Russian', country: 'Russia', kind: 'movies' },
   { query: 'Ленфильм', expect: /ленфильм|lenfilm/i, language: 'Russian', country: 'Russia', kind: 'movies' },
@@ -101,6 +103,13 @@ async function videos(ids: string[]): Promise<Video[]> {
   return out;
 }
 
+/** A 4-digit year mentioned in a title or the start of a description. */
+const yearIn = (text: string) => Number(/\b(19[0-9]\d|20[0-2]\d)\b/.exec(text)?.[1]) || undefined;
+const tooOld = (src: Source, text: string) => {
+  const y = yearIn(text);
+  return !!(src.minYear && y && y < src.minYear);
+};
+
 const thumb = (s: Snip) => s.thumbnails?.maxres?.url ?? s.thumbnails?.standard?.url ?? s.thumbnails?.high?.url ?? s.thumbnails?.medium?.url ?? '';
 const embed = (id: string) => `https://www.youtube-nocookie.com/embed/${id}`;
 const tidy = (t: string) => t.replace(/\s*[|│].*$/, '').replace(/\b(full movie|фильм целиком|полный фильм|סרט מלא|película completa|hd|4k)\b/gi, '').replace(/[\s\-–:()]+$/, '').trim();
@@ -139,6 +148,7 @@ async function main() {
         for (const pl of pls.items.filter((p) => p.contentDetails.itemCount >= 3).slice(0, 40)) {
           const vids = (await videos(await listPlaylist(pl.id, 200))).filter((v) => v.embeddable && v.minutes >= 8);
           if (vids.length < 3) continue;
+          if (tooOld(src, `${pl.snippet.title} ${pl.snippet.description.slice(0, 300)}`)) continue;
           const id = `yt:${pl.id}`;
           const show: Show = {
             id, title: tidy(pl.snippet.title), poster: thumb(pl.snippet), description: cleanText(pl.snippet.description),
@@ -158,6 +168,7 @@ async function main() {
         if (uploads) {
           for (const v of await videos(await listPlaylist(uploads, 1500))) {
             if (!v.embeddable || v.minutes < 55) continue;
+            if (tooOld(src, `${v.snippet.title} ${v.snippet.description.slice(0, 300)}`)) continue;
             const id = `yt:${v.id}`;
             const title = tidy(v.snippet.title);
             if (!title || !isWatchable({ title, description: v.snippet.description })) continue;

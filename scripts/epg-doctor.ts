@@ -45,12 +45,12 @@ export async function processSource(
   targets: MatchTarget[],
   from: number,
   to: number,
-): Promise<{ map: Map<string, string>; byXml: Map<string, Programme[]> } | null> {
+): Promise<{ map: Map<string, string>; byXml: Map<string, Programme[]>; xmlChannels?: number } | { error: string }> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 900_000);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.1' } });
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) return { error: `HTTP ${res.status}` };
     let stream: NodeJS.ReadableStream = Readable.fromWeb(res.body as never);
     if (url.endsWith('.gz')) stream = stream.pipe(createGunzip());
     stream.setEncoding?.('utf8');
@@ -59,6 +59,7 @@ export async function processSource(
     let channelsXml = '';
     let map: Map<string, string> | null = null;
     let wanted = new Set<string>();
+    let xmlChannels = 0;
     const byXml = new Map<string, Programme[]>();
 
     for await (const chunk of stream as AsyncIterable<string | Buffer>) {
@@ -75,9 +76,11 @@ export async function processSource(
         }
         channelsXml += buf.slice(0, p);
         buf = buf.slice(p);
-        map = matchChannels(targets, parseChannels(channelsXml));
+        const xmlCh = parseChannels(channelsXml);
+        xmlChannels = xmlCh.length;
+        map = matchChannels(targets, xmlCh);
         channelsXml = '';
-        if (!map.size) return { map, byXml };
+        if (!map.size) return { map, byXml, xmlChannels };
         wanted = new Set(map.values());
       }
       const cut = buf.lastIndexOf('</programme>');
@@ -85,10 +88,14 @@ export async function processSource(
       collectProgrammes(buf.slice(0, cut + 12), wanted, from, to, byXml);
       buf = buf.slice(cut + 12);
     }
-    if (!map) map = matchChannels(targets, parseChannels(channelsXml + buf));
-    return { map, byXml };
-  } catch {
-    return null;
+    if (!map) {
+      const xmlCh = parseChannels(channelsXml + buf);
+      xmlChannels = xmlCh.length;
+      map = matchChannels(targets, xmlCh);
+    }
+    return { map, byXml, xmlChannels };
+  } catch (e) {
+    return { error: (e as Error).name === 'AbortError' ? 'timeout' : 'download failed' };
   } finally {
     clearTimeout(t);
   }
@@ -116,8 +123,8 @@ async function main() {
     if (!unmatched.size) break;
     const name = url.split('/').slice(-2).join('/');
     const got0 = await processSource(url, [...unmatched.values()], from, to);
-    if (!got0) {
-      log.push(`- ${name}: unavailable`);
+    if ('error' in got0) {
+      log.push(`- ${name}: unavailable (${got0.error})`);
       console.log(log[log.length - 1]);
       continue;
     }
@@ -129,7 +136,7 @@ async function main() {
       unmatched.delete(appId);
       got++;
     }
-    log.push(`- ${name}: ${got0.map.size} matched, ${got} with schedule`);
+    log.push(`- ${name}: ${got0.xmlChannels ?? '?'} in guide, ${got0.map.size} matched, ${got} with schedule`);
     console.log(log[log.length - 1]);
   }
 

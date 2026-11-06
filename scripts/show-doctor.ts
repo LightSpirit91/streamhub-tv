@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { metadataUrl, type ArchiveFile, type SearchDoc } from '../src/core/movies/archive';
-import { itemToShowParts, showSearchUrl } from '../src/core/shows/archive';
+import { isClassicShow, itemToShowParts, showSearchUrl } from '../src/core/shows/archive';
 import type { Episode, Show, ShowCatalog } from '../src/core/shows/types';
 
 const args = process.argv.slice(2);
@@ -57,6 +57,13 @@ async function main() {
     const r = await json<{ response: { docs: SearchDoc[] } }>(showSearchUrl(Math.min(1000, LIMIT), page));
     if (!r.response.docs.length) break;
     docs.push(...r.response.docs);
+  }
+  // Keep only episodes from items still in tonight's curated search, and only
+  // classic shows: this purges anything that came from collections we dropped.
+  const allowed = new Set(docs.map((d) => d.identifier));
+  for (const [key, show] of shows) {
+    show.episodes = show.episodes.filter((e) => allowed.has(e.id.split('/')[0]));
+    if (!show.episodes.length || !isClassicShow(show.title, show.year, show.description)) shows.delete(key);
   }
   const fresh = docs.filter((d) => !knownItems.has(d.identifier));
   console.log(`search: ${docs.length} items, ${fresh.length} new`);
