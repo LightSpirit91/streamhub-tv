@@ -33,8 +33,22 @@ export interface FreeLink {
   url: string;
 }
 
-/** Services never offered (low-quality filler). */
-const SKIP_PROVIDERS = /plex|samsung/i;
+/**
+ * Services never offered: filler (Plex, Samsung TV Plus), YouTube, and paid
+ * services that TMDB lists as "with ads" (an ad tier still needs a subscription).
+ */
+const SKIP_PROVIDERS =
+  /plex|samsung|youtube|amazon|prime video|apple|crave|amc|shahid|wow presents|netflix|disney|paramount|\bmax\b|starz|britbox|acorn|mubi|hayu|sundance|shudder|hollywood suite|super channel|fubo|sling|philo|discovery\+|peacock|hulu|stack ?tv/i;
+/** False for services StreamHub never links to. */
+export const allowedService = (name: string): boolean => !SKIP_PROVIDERS.test(name);
+
+/** Links for a free title with today's rules: rebuilt from availability when known, else filtered. */
+export function currentFreeLinks(item: TmdbMeta & { freeOn?: FreeLink[]; title: string }): FreeLink[] {
+  return item.watch?.providers.length ? freeLinks(item, item.title) : (item.freeOn ?? []).filter((l) => allowedService(l.name));
+}
+
+/** Free with a public library card. */
+const LIBRARY = /hoopla|kanopy/i;
 
 /** Direct search pages for services whose URL format is stable; others use the TMDB watch page. */
 const SEARCH_URL: [RegExp, (q: string) => string][] = [
@@ -49,9 +63,10 @@ export function freeLinks(meta: TmdbMeta, title: string): FreeLink[] {
     if ((p.type !== 'free' && p.type !== 'ads') || SKIP_PROVIDERS.test(p.name) || out.some((x) => x.name === p.name)) continue;
     const direct = SEARCH_URL.find(([re]) => re.test(p.name))?.[1](title);
     const url = direct ?? fallback;
-    if (url) out.push({ name: p.name, logo: p.logo, type: p.type, url });
+    if (url) out.push({ name: LIBRARY.test(p.name) ? `${p.name} (library card)` : p.name, logo: p.logo, type: p.type, url });
   }
-  return out;
+  // Watch-right-away services first, library-card ones last.
+  return out.sort((a, b) => Number(LIBRARY.test(a.name)) - Number(LIBRARY.test(b.name)));
 }
 
 /** Everything TMDB adds to a movie or a show. */

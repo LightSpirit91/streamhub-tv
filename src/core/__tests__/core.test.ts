@@ -309,6 +309,8 @@ describe('blocked streams', () => {
     expect(isBannedStream({ url: 'https://www.youtube-nocookie.com/embed/wMghm5USzOY' })).toBe(true);
     expect(isBannedStream({ url: 'https://x.example/a.m3u8', source: 'iptv-org:raw:us_samsung' })).toBe(true);
     expect(isBannedStream({ url: 'https://jmp2.uk/plu-5f1234.m3u8' })).toBe(false);
+    expect(isBannedStream({ url: 'https://lotus.stingray.com/manifest/djazz-djaads-montreal/samsungtvplus/master.m3u8' })).toBe(true);
+    expect(isBannedStream({ url: 'https://cdn.example/linear/amg01-plex-tennis/playlist.m3u8' })).toBe(true);
     expect(isBannedStream({ url: 'https://cdn.example/multiplex/live.m3u8' })).toBe(false);
 
     const e = (name: string, url: string) => ({ name, url, groups: [] as string[], attrs: {} });

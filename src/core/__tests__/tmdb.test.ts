@@ -70,3 +70,17 @@ describe('free to stream', () => {
     expect(list.sort(byNewest)).toEqual([{ releaseDate: '2026-11-05', year: 2026 }, { releaseDate: '2026-10-30', year: 2026 }, { year: 2025 }, { year: 2019 }]);
   });
 });
+
+describe('free services', () => {
+  it('drops paid ad tiers and YouTube, labels library-card services and lists them last', async () => {
+    const { freeLinks } = await import('../meta/tmdb');
+    const names = freeLinks({
+      tmdbId: 1, tmdbType: 'movie',
+      watch: { providers: [
+        { name: 'Hoopla', type: 'free' }, { name: 'Amazon Prime Video', type: 'ads' }, { name: 'Apple TV', type: 'ads' },
+        { name: 'Crave', type: 'ads' }, { name: 'YouTube', type: 'free' }, { name: 'CBC Gem', type: 'ads' }, { name: 'Tubi TV', type: 'ads' },
+      ] },
+    }, 'X').map((l) => l.name);
+    expect(names).toEqual(['CBC Gem', 'Tubi TV', 'Hoopla (library card)']);
+  });
+});

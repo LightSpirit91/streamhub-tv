@@ -154,27 +154,39 @@ async function main() {
   const week: Record<string, Programme[]> = {};
   const log: string[] = [];
 
+  // Every guide is read for every channel. A channel listed by several guides
+  // keeps the one that reaches furthest ahead (only if it adds a day or more,
+  // so the better-matched first guide wins ties).
+  const reachOf = (l: Programme[]) => l[l.length - 1][1];
   for (const url of await guideSources()) {
-    if (!unmatched.size) break;
     const name = url.split('/').slice(-2).join('/');
-    const got0 = await processSource(url, [...unmatched.values()], from, to);
+    const got0 = await processSource(url, targets, from, to);
     if ('error' in got0) {
       log.push(`- ${name}: unavailable (${got0.error})`);
       console.log(log[log.length - 1]);
       continue;
     }
-    let got = 0;
+    let added = 0;
+    let longer = 0;
+    let furthest = 0;
     for (const [appId, xmlId] of got0.map) {
       const all = dedupe((got0.byXml.get(xmlId) ?? []).sort((a, b) => a[0] - b[0]));
       if (!all.length) continue;
+      furthest = Math.max(furthest, reachOf(all));
+      const cur = week[appId];
+      if (cur && reachOf(all) < reachOf(cur) + 86400) continue;
+      if (cur) longer++;
+      else added++;
       week[appId] = all;
-      const list = all.filter((p) => p[0] < soon).slice(0, 14);
-      if (list.length) programs[appId] = list;
       unmatched.delete(appId);
-      got++;
     }
-    log.push(`- ${name}: ${got0.xmlChannels ?? '?'} in guide, ${got0.map.size} matched, ${got} with schedule`);
+    const ahead = furthest ? ` (reaches ${((furthest - now) / 86400).toFixed(1)} days ahead)` : '';
+    log.push(`- ${name}: ${got0.xmlChannels ?? '?'} in guide, ${got0.map.size} matched, ${added} new + ${longer} longer schedules${ahead}`);
     console.log(log[log.length - 1]);
+  }
+  for (const [appId, all] of Object.entries(week)) {
+    const list = all.filter((p) => p[0] < soon && p[1] > from).slice(0, 14);
+    if (list.length) programs[appId] = list;
   }
 
   const builtAt = Date.now();

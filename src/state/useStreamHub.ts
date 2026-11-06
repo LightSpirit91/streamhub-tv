@@ -12,6 +12,7 @@ import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { genresFromTmdb } from '../core/movies/youtube';
+import { currentFreeLinks } from '../core/meta/tmdb';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -93,6 +94,9 @@ const clean = (list: Movie[]) =>
   list
     // Nothing from YouTube is offered.
     .filter((m) => m.source !== 'youtube' && isWatchable({ title: m.title, description: m.description }))
+    // Free-elsewhere titles: links rebuilt with today's rules (paid / blocked services dropped).
+    .map((m) => (m.source === 'free' ? { ...m, freeOn: currentFreeLinks(m) } : m))
+    .filter((m) => m.source !== 'free' || m.freeOn?.length)
     .map((m) => ({
       ...m,
       title: stripEmoji(m.title),
@@ -126,6 +130,8 @@ async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
 const cleanShows = (list: Show[]) =>
   list
     .filter((x) => x.source !== 'youtube' && isWatchable({ title: x.title, description: x.description }))
+    .map((x) => (x.source === 'free' ? { ...x, freeOn: currentFreeLinks(x) } : x))
+    .filter((x) => x.source !== 'free' || x.freeOn?.length)
     .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));
 
 async function loadShows(force: boolean): Promise<Show[]> {

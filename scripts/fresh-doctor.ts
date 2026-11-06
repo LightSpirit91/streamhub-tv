@@ -148,6 +148,12 @@ async function run<T extends Movie | Show>(type: 'movie' | 'tv', items: T[], bui
   const playTitles = new Set(playable.map((x) => `${titleKey(x.title)}|${x.year ?? ''}`));
   const known = new Map(items.filter((x) => x.source === 'free').map((x) => [x.tmdbId!, x as Free<T>]));
 
+  // 0) Every night: rebuild links from the stored availability with today's rules.
+  for (const [id, x] of known) {
+    x.freeOn = freeLinks({ ...x, tmdbType: type }, x.title);
+    if (!x.freeOn.length) known.delete(id);
+  }
+
   // 1) Weekly re-check: drop titles that stopped being free.
   const due = [...known.values()].filter((x) => now - (x.freeCheckedAt ?? 0) > RECHECK_MS).slice(0, RECHECK_MAX);
   let dropped = 0;

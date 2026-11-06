@@ -44,8 +44,8 @@ const IPV4_HOST = /^\d{1,3}(\.\d{1,3}){3}$/;
 export function isBannedStream(s: { url: string; format?: string; source?: string }): boolean {
   if (s.format === 'youtube' || youtubeId(s.url) || /(^|\.)(youtube(-nocookie)?\.com|youtu\.be)$/.test(hostOf(s.url))) return true;
   if (s.source && (/_(samsung|plex)$/.test(s.source) || s.source === 'youtube-live')) return true;
-  const host = hostOf(s.url);
-  if (/samsung/.test(host) || /(^|[.-])plex([.-]|$)/.test(host)) return true;
+  // Samsung TV Plus / Plex feeds of otherwise normal channels carry the name in the address.
+  if (/samsung/i.test(s.url) || /(^|[^a-z])plex(tv)?([^a-z]|$)/i.test(s.url)) return true;
   return /jmp2\.uk\/(sam|plex|plx)-|i\.mjh\.nz\/(SamsungTVPlus|Plex)\//i.test(s.url);
 }
 
