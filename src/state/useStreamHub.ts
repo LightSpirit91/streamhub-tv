@@ -6,7 +6,8 @@ import { loadCatalog, fetchText } from '../core/catalog/loader';
 import { applyHealth } from '../core/catalog/buildCatalog';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
-import { STREAMHUB_MOVIES_URL } from '../core/catalog/sources';
+import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL } from '../core/catalog/sources';
+import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable } from '../core/movies/archive';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
@@ -57,6 +58,9 @@ interface StreamHubState extends ProfileData {
   byId: Map<string, Channel>;
   movies: Movie[];
   movieById: Map<string, Movie>;
+  /** TV guide: channel id -> programmes [start, end, title, desc?, category?] */
+  epg: Record<string, Programme[]>;
+  loadEpg(): Promise<void>;
   health: Record<string, StreamHealth>;
   selectProfile(p: ProfileId): void;
   signOut(): void;
@@ -114,6 +118,7 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
   byId: new Map(),
   movies: [],
   movieById: new Map(),
+  epg: {},
   health: readJSON<Record<string, StreamHealth>>('health', {}),
 
   selectProfile(p) {
@@ -125,8 +130,27 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
     set({ profile: null, ...empty });
   },
 
+  async loadEpg() {
+    const KEY = 'epg.v1.json';
+    try {
+      const raw = await fileBlobStore.read(KEY);
+      if (raw) {
+        const g = JSON.parse(raw) as Guide & { savedAt: number };
+        set({ epg: g.programs });
+        if (Date.now() - g.savedAt < 3 * 3_600_000) return;
+      }
+      const text = await fetchText(STREAMHUB_EPG_URL, globalThis.fetch as never, 30_000);
+      const g = JSON.parse(text) as Guide;
+      set({ epg: g.programs });
+      await fileBlobStore.write(KEY, JSON.stringify({ ...g, savedAt: Date.now() }));
+    } catch {
+      // no guide yet: the app works without it
+    }
+  },
+
   async load(force = false) {
     if (!get().channels.length) set({ status: 'loading', error: undefined });
+    get().loadEpg();
     loadMovies(force).then((movies) => set({ movies, movieById: new Map(movies.map((m) => [m.id, m])) }));
     try {
       const { catalog } = await getCatalog({

@@ -33,7 +33,7 @@ function MovieCardBase({ movie, width, progress, onPress }: Props) {
       </View>
       <Text numberOfLines={1} style={styles.title}>{movie.title}</Text>
       <Text numberOfLines={1} style={styles.meta}>
-        {[movie.year, movie.genres[0]].filter(Boolean).join('  ·  ')}
+        {[movie.imdbRating ? `★ ${movie.imdbRating.toFixed(1)}` : null, movie.year, movie.genres[0]].filter(Boolean).join('  ·  ')}
       </Text>
     </Pressable>
   );

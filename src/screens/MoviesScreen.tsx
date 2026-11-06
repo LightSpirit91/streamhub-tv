@@ -56,6 +56,14 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
     () => DECADES.map((d) => ({ d, list: movies.filter((m) => decadeOf(m) === d) })).filter((x) => x.list.length >= 4),
     [movies],
   );
+  const fresh = useMemo(() => {
+    const cutoff = Date.now() - 14 * 86_400_000;
+    return movies.filter((m) => (m.addedAt ?? 0) > cutoff).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)).slice(0, 40);
+  }, [movies]);
+  const topRated = useMemo(
+    () => movies.filter((m) => (m.imdbRating ?? 0) >= 7 && (m.imdbVotes ?? 0) >= 1000).sort((a, b) => (b.imdbRating ?? 0) - (a.imdbRating ?? 0)).slice(0, 40),
+    [movies],
+  );
   // "Because you watched": same lead genre as the latest film in progress.
   const because = useMemo(() => {
     const seed = cont[0] ?? mine[0];
@@ -159,7 +167,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
             <Text style={styles.overline}>{resume ? 'CONTINUE WATCHING' : `#${heroIdx + (cont[0] ? 0 : 1)} MOST WATCHED`}</Text>
             <Text style={[styles.title, L.compact && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>{hero.title}</Text>
             <Text style={styles.meta}>
-              {[hero.year, hero.minutes ? `${Math.floor(hero.minutes / 60)}h ${hero.minutes % 60}m` : hero.runtime, hero.genres.slice(0, 3).join(' · '), hero.language]
+              {[hero.imdbRating ? `IMDb ${hero.imdbRating.toFixed(1)}` : null, hero.year, hero.minutes ? `${Math.floor(hero.minutes / 60)}h ${hero.minutes % 60}m` : hero.runtime, hero.genres.slice(0, 3).join(' · '), hero.language]
                 .filter(Boolean)
                 .join('   ')}
             </Text>
@@ -189,6 +197,8 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
         gutter={L.gutter}
         render={(m, i) => <TopTen movie={m} rank={i + 1} width={L.posterWidth} onPress={onOpen} />}
       />
+      <Row title="New on StreamHub" subtitle={fresh.length ? `${fresh.length} this week` : undefined} accent={colors.ok} data={fresh} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
+      <Row title="Highest Rated on IMDb" accent="#F5C518" data={topRated} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       {because && (
         <Row title={`Because you watched ${because.seed.title}`} data={because.list} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       )}

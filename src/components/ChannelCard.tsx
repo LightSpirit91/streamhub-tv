@@ -6,6 +6,8 @@ import { Heart } from 'lucide-react-native';
 import type { Channel } from '../core/types';
 import { colors, fonts, qualityLabel, radius } from '../ui/theme';
 import { CountryTag, QualityBadge, useFocusRing } from '../ui/primitives';
+import { ProgressLine, progressOf, useProgramme } from './Guide';
+import { useNow } from '../hooks/useNow';
 
 interface Props {
   channel: Channel;
@@ -31,6 +33,8 @@ function ChannelCardBase({ channel, width, accent, favorite, onPress, preferredF
   const f = useFocusRing();
   const [logoFailed, setLogoFailed] = useState(false);
   const h = Math.round((width * 9) / 16);
+  const now = useNow();
+  const { now: on } = useProgramme(channel.id, now);
 
   return (
     <Pressable
@@ -68,9 +72,17 @@ function ChannelCardBase({ channel, width, accent, favorite, onPress, preferredF
             <Heart size={14} color={colors.gold} fill={colors.gold} />
           </View>
         )}
+        {on ? (
+          <View style={styles.prog}>
+            <ProgressLine value={progressOf(on, now)} color={accent} />
+          </View>
+        ) : null}
       </View>
       <Text numberOfLines={1} style={[styles.name, f.on && { color: '#fff' }]}>
         {channel.name}
+      </Text>
+      <Text numberOfLines={1} style={styles.line}>
+        {on ? on[2] : channel.tagline ?? ' '}
       </Text>
       <CountryTag country={channel.country} />
     </Pressable>
@@ -98,4 +110,6 @@ const styles = StyleSheet.create({
   badges: { position: 'absolute', left: 8, bottom: 8, flexDirection: 'row', gap: 6 },
   fav: { position: 'absolute', right: 8, top: 8 },
   name: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 14 },
+  line: { color: colors.textDim, fontFamily: fonts.body, fontSize: 12.5, marginTop: -2 },
+  prog: { position: 'absolute', left: 0, right: 0, bottom: 0 },
 });

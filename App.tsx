@@ -37,6 +37,9 @@ export default function App() {
 
   useEffect(() => {
     load();
+    // Keep the TV guide current while the app stays open.
+    const t = setInterval(() => useStreamHub.getState().loadEpg(), 60 * 60_000);
+    return () => clearInterval(t);
   }, [load]);
 
   // Resume the last channel on the TV and phone apps once a profile is picked.

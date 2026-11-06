@@ -13,6 +13,8 @@ import { useRemote } from '../tv/useRemote';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
 import StreamVideo from './StreamVideo';
+import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
+import { clock, useNow } from '../hooks/useNow';
 import type { Fit } from './StreamVideo.types';
 
 const FITS: { fit: Fit; label: string }[] = [
@@ -212,6 +214,8 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
   const fit = FITS[fitIdx];
   const isWeb = Platform.OS === 'web';
+  const nowSec = useNow();
+  const guide = useProgramme(id, nowSec);
   const title = channel?.name ?? movie?.title ?? '';
   const ic = colors.text;
 
@@ -260,7 +264,31 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
                 {channel ? <QualityBadge label={qualityLabel(stream?.height ?? channel.bestHeight)} /> : null}
                 {movie ? <Text style={styles.meta}>{[movie.year, movie.genres[0]].filter(Boolean).join('  ·  ')}</Text> : null}
                 {channel && streams.length > 1 ? <Text style={styles.meta}>Source {streamIdx + 1} of {streams.length}</Text> : null}
+                {movie?.imdbRating ? <Text style={styles.imdb}>IMDb {movie.imdbRating.toFixed(1)}</Text> : null}
+                {movie?.quality ? <Text style={styles.meta}>{movie.quality}</Text> : null}
               </View>
+              {live && guide.now ? (
+                <View style={styles.onNow}>
+                  <Text style={styles.onNowText} numberOfLines={1}>
+                    <Text style={{ color: colors.gold }}>Now </Text>
+                    {guide.now[2]}
+                    <Text style={styles.meta}>{`   ${clock(guide.now[0])} - ${clock(guide.now[1])}`}</Text>
+                    {guide.next[0] ? <Text style={styles.meta}>{`   ·   Next at ${clock(guide.next[0][0])}: ${guide.next[0][2]}`}</Text> : null}
+                  </Text>
+                  <View style={{ width: 260 }}>
+                    <ProgressLine value={progressOf(guide.now, nowSec)} />
+                  </View>
+                </View>
+              ) : live && channel?.tagline ? (
+                <Text style={styles.meta}>{channel.tagline}</Text>
+              ) : null}
+              {movie && (movie.director?.length || movie.cast?.length) ? (
+                <Text style={styles.meta} numberOfLines={1}>
+                  {[movie.director?.length ? `Directed by ${movie.director.join(', ')}` : '', movie.cast?.length ? `With ${movie.cast.slice(0, 4).join(', ')}` : '']
+                    .filter(Boolean)
+                    .join('   ·   ')}
+                </Text>
+              ) : null}
             </View>
             <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
               <Heart size={22} color={saved ? colors.gold : ic} fill={saved ? colors.gold : 'transparent'} />
@@ -396,6 +424,12 @@ const styles = StyleSheet.create({
   title: { ...type.h1, color: colors.text, fontSize: 26 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   meta: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 13 },
+  imdb: {
+    color: '#000', backgroundColor: '#F5C518', fontFamily: fonts.bodyBold, fontSize: 12, paddingHorizontal: 6,
+    paddingVertical: 1, borderRadius: 4, overflow: 'hidden',
+  },
+  onNow: { gap: 2, marginTop: 2 },
+  onNowText: { color: colors.text, fontFamily: fonts.bodySemi, fontSize: 14 },
   bottom: {
     position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 28, paddingBottom: 26, paddingTop: 40,
     backgroundColor: 'rgba(0,0,0,0.5)', gap: 14,

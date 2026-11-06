@@ -10,6 +10,8 @@ import { initials } from '../components/ChannelCard';
 import { Button, CountryTag, LiveBadge, QualityBadge, useFocusRing } from '../ui/primitives';
 import { colors, fonts, qualityLabel, radius, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
+import { ProgramCell, Schedule, useProgramme } from '../components/Guide';
+import { useNow } from '../hooks/useNow';
 
 const ROW_H = 68;
 const TUNE_DELAY = 550;
@@ -94,6 +96,7 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
 
   const wide = !L.compact && L.ff !== 'tablet';
   const current = list[sel];
+  const now = useNow();
 
   const filters: { id: HubId | 'all' | 'mylist'; label: string; color: string }[] = [
     { id: 'all', label: 'All channels', color: colors.gold },
@@ -121,6 +124,12 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
                 <Text key={h} style={[styles.hubTag, { color: HUB_BY_ID[h].accent }]}>{HUB_BY_ID[h].title}</Text>
               ))}
           </View>
+          {current.tagline ? <Text style={styles.tagline}>{current.tagline}</Text> : null}
+          {wide ? (
+            <View style={styles.schedule}>
+              <Schedule channelId={current.id} now={now} max={5} />
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
             <Button
               variant="primary"
@@ -149,7 +158,7 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
 
       <View style={[styles.body, { paddingHorizontal: L.gutter }, wide ? { flexDirection: 'row' } : { flexDirection: 'column' }]}>
         {!wide && preview}
-        <View style={[styles.guide, wide ? { width: Math.min(460, L.width * 0.36) } : { flex: 1 }]}>
+        <View style={[styles.guide, wide ? { width: Math.min(820, L.width * 0.56) } : { flex: 1 }]}>
           <Text style={styles.guideHead}>
             {list.length.toLocaleString()} channels{Platform.OS === 'web' && wide ? '  ·  Use ↑ ↓ to surf, Enter for fullscreen' : ''}
           </Text>
@@ -163,6 +172,7 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
             renderItem={({ item, index }) => (
               <GuideRow
                 channel={item}
+                grid={wide}
                 number={numbers.get(item.id) ?? 0}
                 selected={index === sel}
                 favorite={favorites.includes(item.id)}
@@ -218,10 +228,12 @@ const Preview = memo(function Preview({ channel }: { channel: Channel }) {
 });
 
 const GuideRow = memo(function GuideRow({
-  channel, number, selected, favorite, onSelect, onOpen,
-}: { channel: Channel; number: number; selected: boolean; favorite: boolean; onSelect(): void; onOpen(): void }) {
+  channel, number, selected, favorite, grid, onSelect, onOpen,
+}: { channel: Channel; number: number; selected: boolean; favorite: boolean; grid: boolean; onSelect(): void; onOpen(): void }) {
   const f = useFocusRing();
   const [logoFailed, setLogoFailed] = useState(false);
+  const now = useNow();
+  const { now: cur, next } = useProgramme(channel.id, now);
   return (
     <Pressable
       onPress={onOpen}
@@ -242,12 +254,31 @@ const GuideRow = memo(function GuideRow({
           <Text style={styles.rowInitials}>{initials(channel.name)}</Text>
         )}
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
-        <Text numberOfLines={1} style={[styles.rowName, selected && { color: '#fff' }]}>{channel.name}</Text>
-        <CountryTag country={channel.country} />
+      <View style={{ width: grid ? 190 : undefined, flex: grid ? undefined : 1, gap: 3 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text numberOfLines={1} style={[styles.rowName, selected && { color: '#fff' }, { flexShrink: 1 }]}>{channel.name}</Text>
+          {favorite ? <Heart size={12} color={colors.gold} fill={colors.gold} /> : null}
+        </View>
+        <Text numberOfLines={1} style={styles.rowSub}>{!grid && cur ? cur[2] : channel.tagline ?? channel.country ?? ''}</Text>
       </View>
-      {favorite ? <Heart size={14} color={colors.gold} fill={colors.gold} /> : null}
-      <QualityBadge label={qualityLabel(channel.bestHeight)} />
+      {grid ? (
+        <View style={styles.cells}>
+          {cur || next.length ? (
+            <>
+              <ProgramCell p={cur} now={now} live flex={1.3} />
+              <ProgramCell p={next[0]} now={now} />
+              <ProgramCell p={next[1]} now={now} />
+            </>
+          ) : (
+            <View style={styles.noGuide}>
+              <CountryTag country={channel.country} />
+              <QualityBadge label={qualityLabel(channel.bestHeight)} />
+            </View>
+          )}
+        </View>
+      ) : (
+        <QualityBadge label={qualityLabel(channel.bestHeight)} />
+      )}
     </Pressable>
   );
 });
@@ -283,6 +314,11 @@ const styles = StyleSheet.create({
   },
   rowInitials: { color: colors.textDim, fontFamily: fonts.displayHeavy, fontSize: 14 },
   rowName: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 14 },
+  rowSub: { color: colors.textDim, fontFamily: fonts.body, fontSize: 12 },
+  cells: { flex: 1, flexDirection: 'row', alignSelf: 'stretch', marginVertical: 4 },
+  noGuide: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: colors.line },
+  tagline: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 13 },
+  schedule: { marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.line, maxWidth: 560 },
   preview: {
     borderRadius: 18, overflow: 'hidden', backgroundColor: '#000', borderWidth: 1, borderColor: colors.line,
     justifyContent: 'flex-end', minHeight: 220,
