@@ -8,6 +8,7 @@
  * Guide sources (public XMLTV):
  * - epgshare01.online: per-country guides (US, Canada, Israel, Mexico, Latin America, sports...)
  * - i.mjh.nz: Pluto TV and Roku free-channel guides
+ * - epg.pw: large per-country guides (US, Canada, Russia, Mexico, UK)
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,6 +36,8 @@ const MJH = [
   'https://i.mjh.nz/PlutoTV/mx.xml.gz',
   'https://i.mjh.nz/Roku/all.xml.gz',
 ];
+/** epg.pw: large per-country guides (US 5,500 channels, Russia 4,100), several days ahead. */
+const EPGPW = ['US', 'CA', 'RU', 'MX', 'GB'].map((c) => `https://epg.pw/xmltv/epg_${c}.xml.gz`);
 
 async function guideSources(): Promise<string[]> {
   let files = FALLBACK;
@@ -47,7 +50,7 @@ async function guideSources(): Promise<string[]> {
   }
   // Israel and the big US/Canada guides first; the free-channel guides last.
   const rank = (f: string) => (/_(IL|US|CA)/.test(f) ? 0 : /_(RU|KZ|UA|viva)/.test(f) ? 1 : 2);
-  return [...files.sort((a, b) => rank(a) - rank(b)).map((f) => `${EPGSHARE}/${f}`), ...MJH];
+  return [...files.sort((a, b) => rank(a) - rank(b)).map((f) => `${EPGSHARE}/${f}`), ...MJH, ...EPGPW];
 }
 
 /**
