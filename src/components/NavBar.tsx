@@ -5,6 +5,7 @@ import { PROFILES, useStreamHub } from '../state/useStreamHub';
 import { colors, fonts } from '../ui/theme';
 import { useFocusRing } from '../ui/primitives';
 import { Wordmark } from './Wordmark';
+import { CastButton } from './CastControls';
 
 export type Tab = 'home' | 'live' | 'movies' | 'shows' | 'mylist' | 'search';
 
@@ -36,6 +37,7 @@ export function TopBar({ tab, onTab, compact, gutter }: Props) {
         </View>
       )}
       <View style={{ flex: 1 }} />
+      <CastButton compact={compact} />
       <ProfileChip />
     </View>
   );

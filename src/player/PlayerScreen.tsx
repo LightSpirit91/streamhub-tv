@@ -14,7 +14,7 @@ import { useRemote } from '../tv/useRemote';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
 import StreamVideo from './MediaView';
-import { airPlaySupported, castMedia, stopCasting, useCast } from './cast/useCast';
+import { airPlaySupported, castMedia, connectCast, remote, stopCasting, useCast, useCastStore } from './cast/useCast';
 import AirPlayNative from './cast/AirPlayNative';
 import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
 import { clock, useNow } from '../hooks/useNow';
@@ -96,6 +96,60 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const lastSave = useRef(0);
 
   const stream = streams[streamIdx];
+  const nowSec = useNow();
+  const guide = useProgramme(id, nowSec);
+
+  // Chromecast: while a TV is connected, nothing plays here and this screen
+  // is the remote. Channel switches and next episodes follow to the TV.
+  const cast = useCast();
+  const casting = !!cast.device;
+  const [airplay, setAirplay] = useState(0);
+  const sendToTv = useCallback(async () => {
+    if (!stream || stream.format === 'youtube') return;
+    try {
+      await castMedia({
+        url: stream.url,
+        format: stream.format,
+        live,
+        title: channel?.name ?? movie?.title ?? '',
+        subtitle: live ? guide.now?.[2] ?? channel?.tagline : movie?.year ? String(movie.year) : undefined,
+        image: channel?.logo ?? movie?.posterHi ?? movie?.poster,
+        startAt: live ? undefined : (time.cur || resumeAt) > 5 ? time.cur || resumeAt : undefined,
+        key: `${item.kind}:${id}`,
+      });
+    } catch {
+      // the store carries a friendly error for the overlay
+    }
+  }, [stream, live, channel, movie, guide.now, time.cur, resumeAt, item.kind, id]);
+  useEffect(() => {
+    if (casting && stream && useCastStore.getState().media?.url !== stream.url) sendToTv();
+  }, [casting, stream?.url]); // eslint-disable-line react-hooks/exhaustive-deps
+  // When the TV session ends, pick up playback here again.
+  const wasCasting = useRef(false);
+  useEffect(() => {
+    if (wasCasting.current && !casting) setPaused(false);
+    wasCasting.current = casting;
+  }, [casting]);
+
+  // One set of controls for both: local playback or the TV.
+  const isPaused = casting ? cast.paused : paused;
+  const isMuted = casting ? cast.muted : muted;
+  const vol = casting ? cast.volume : volume;
+  const cur = casting ? cast.currentTime : time.cur;
+  const dur = casting ? cast.duration : time.dur;
+  const doPlayPause = () => (casting ? remote.playPause() : setPaused((p) => !p));
+  const doMute = () => {
+    if (casting) remote.mute();
+    else {
+      setMuted((m) => !m);
+      setAutoMuted(false);
+    }
+  };
+  const doVolume = (d: number) => {
+    if (casting) remote.volume(+(cast.volume + d).toFixed(1));
+    else setVolume((v) => Math.max(0, Math.min(1, +(v + d).toFixed(1))));
+  };
+  const doSeek = (t: number) => (casting ? remote.seek(t) : setSeek({ to: t, n: Date.now() }));
 
   useEffect(() => {
     setStreamIdx(0);
@@ -135,10 +189,10 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   }, [ctrl, stream, reportStream]);
 
   useEffect(() => {
-    if (state.kind === 'playing' || state.kind === 'offline' || paused) return;
+    if (casting || state.kind === 'playing' || state.kind === 'offline' || paused) return;
     const t = setTimeout(handleError, STALL_MS);
     return () => clearTimeout(t);
-  }, [streamIdx, attempt, state.kind, handleError, paused]);
+  }, [streamIdx, attempt, state.kind, handleError, paused, casting]);
 
   const onTime = useCallback(
     (cur: number, dur: number) => {
@@ -173,10 +227,10 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
   const seekBy = useCallback(
     (d: number) => {
-      setSeek({ to: time.cur + d, n: Date.now() });
+      doSeek(cur + d);
       showChrome();
     },
-    [time.cur, showChrome],
+    [cur, showChrome, casting], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const toggleFullscreen = () => {
@@ -196,12 +250,12 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
       else if (live && (k === 'ArrowDown' || k === 'PageDown')) go(1);
       else if (!live && k === 'ArrowRight') seekBy(10);
       else if (!live && k === 'ArrowLeft') seekBy(-10);
-      else if (k === ' ' || k === 'k') setPaused((p) => !p);
-      else if (k === 'm' || k === 'M') setMuted((m) => !m);
+      else if (k === ' ' || k === 'k') doPlayPause();
+      else if (k === 'm' || k === 'M') doMute();
       else if (k === 'f' || k === 'F') toggleFullscreen();
       else if (k === 'a' || k === 'A') setFitIdx((i) => (i + 1) % FITS.length);
-      else if (live && k === 'ArrowRight') setVolume((v) => Math.min(1, +(v + 0.1).toFixed(1)));
-      else if (live && k === 'ArrowLeft') setVolume((v) => Math.max(0, +(v - 0.1).toFixed(1)));
+      else if (live && k === 'ArrowRight') doVolume(0.1);
+      else if (live && k === 'ArrowLeft') doVolume(-0.1);
       else return;
       e.preventDefault();
       showChrome();
@@ -209,12 +263,12 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
     const w = globalThis as unknown as Window;
     w.addEventListener('keydown', onKey);
     return () => w.removeEventListener('keydown', onKey);
-  }, [go, onClose, showChrome, seekBy, live]);
+  }, [go, onClose, showChrome, seekBy, live, casting, cast.volume]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRemote((t) => {
     if (live && !chrome && (t === 'up' || t === 'down')) go(t === 'up' ? -1 : 1);
     else if (!live && !chrome && (t === 'left' || t === 'right')) seekBy(t === 'right' ? 10 : -10);
-    else if (t === 'playPause') setPaused((p) => !p);
+    else if (t === 'playPause') doPlayPause();
     else if (t === 'fastForward') seekBy(30);
     else if (t === 'rewind') seekBy(-30);
     else showChrome();
@@ -230,48 +284,12 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
   const fit = FITS[fitIdx];
   const isWeb = Platform.OS === 'web';
-  const nowSec = useNow();
-  const guide = useProgramme(id, nowSec);
-
-  // Chromecast: once connected, every channel switch or episode follows to the TV.
-  const cast = useCast();
-  const casting = !!cast.device;
-  const [airplay, setAirplay] = useState(0);
-  const [castError, setCastError] = useState<string | null>(null);
-  const sendToTv = useCallback(async () => {
-    if (!stream || stream.format === 'youtube') return;
-    try {
-      setCastError(null);
-      await castMedia({
-        url: stream.url,
-        format: stream.format,
-        live,
-        title: channel?.name ?? movie?.title ?? '',
-        subtitle: live ? guide.now?.[2] ?? channel?.tagline : movie?.year ? String(movie.year) : undefined,
-        image: channel?.logo ?? movie?.posterHi ?? movie?.poster,
-        startAt: live ? undefined : time.cur || undefined,
-      });
-      setPaused(true);
-    } catch (e) {
-      const msg = (e as Error)?.message ?? '';
-      if (msg && !/cancel/i.test(msg)) setCastError('This channel could not start on the TV. Try another source or channel.');
-    }
-  }, [stream, live, channel, movie, guide.now, time.cur]);
-  useEffect(() => {
-    if (casting) sendToTv();
-  }, [casting, stream?.url]); // eslint-disable-line react-hooks/exhaustive-deps
-  // When the TV session ends, pick up playback here again.
-  const wasCasting = useRef(false);
-  useEffect(() => {
-    if (wasCasting.current && !casting) setPaused(false);
-    wasCasting.current = casting;
-  }, [casting]);
   const title = channel?.name ?? movie?.title ?? '';
   const ic = colors.text;
 
   return (
     <View style={styles.root}>
-      {stream && (
+      {stream && !casting && (
         <StreamVideo
           stream={stream}
           attempt={attempt}
@@ -302,28 +320,18 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
         <View style={styles.casting} pointerEvents="box-none">
           <Cast size={46} color={colors.gold} />
           <Text style={styles.castHead}>Playing on {cast.device}</Text>
-          <Text style={styles.statusDetail}>{live ? 'Channel up and down follow to the TV.' : 'Use the TV or this screen to control playback.'}</Text>
-          <Pressable style={styles.castStop} onPress={() => { stopCasting(); setPaused(false); }}>
+          <Text style={styles.statusDetail}>
+            {cast.error ?? (live ? 'Use channel up and down here to change the channel on the TV.' : 'This screen is your remote: pause, seek and volume control the TV.')}
+          </Text>
+          <Pressable style={styles.castStop} onPress={() => stopCasting()}>
             <Text style={styles.unmuteText}>Stop casting</Text>
           </Pressable>
         </View>
       ) : state.kind !== 'playing' ? (
         <StatusOverlay state={state} title={title} sources={streams.length} live={live} />
       ) : null}
-      {castError ? (
-        <Pressable style={styles.unmute} onPress={() => setCastError(null)}>
-          <Text style={styles.unmuteText}>{castError}</Text>
-        </Pressable>
-      ) : null}
 
-      {autoMuted && state.kind === 'playing' && (
-        <Pressable style={styles.unmute} onPress={() => { setAutoMuted(false); setMuted(false); }}>
-          <VolumeX size={18} color={colors.text} />
-          <Text style={styles.unmuteText}>Tap to unmute</Text>
-        </Pressable>
-      )}
-
-      {(chrome || state.kind !== 'playing') && (
+      {(chrome || casting || state.kind !== 'playing') && (
         <>
           <View style={styles.top}>
             <IconBtn onPress={onClose} label="Back"><ChevronLeft size={24} color={ic} /></IconBtn>
@@ -363,7 +371,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
               ) : null}
             </View>
             {stream?.format !== 'youtube' && (cast.available || casting) ? (
-              <IconBtn onPress={() => (casting ? stopCasting() : sendToTv())} label={casting ? 'Stop casting' : 'Cast to TV'}>
+              <IconBtn onPress={() => (casting ? stopCasting() : connectCast())} label={casting ? 'Stop casting' : 'Cast to TV'}>
                 <Cast size={22} color={casting ? colors.gold : ic} />
               </IconBtn>
             ) : null}
@@ -383,35 +391,35 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
           <View style={styles.bottom}>
             {!live && (
-              <Scrubber cur={time.cur} dur={time.dur} onSeek={(t) => { setSeek({ to: t, n: Date.now() }); showChrome(); }} />
+              <Scrubber cur={cur} dur={dur} onSeek={(t) => { doSeek(t); showChrome(); }} />
             )}
             <View style={styles.controls}>
               {live ? (
                 <>
                   <IconBtn onPress={() => go(-1)} label="Previous channel"><ChevronUp size={22} color={ic} /></IconBtn>
-                  <IconBtn onPress={() => setPaused((p) => !p)} label={paused ? 'Play' : 'Pause'} big>
-                    {paused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
+                  <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
+                    {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
                   </IconBtn>
                   <IconBtn onPress={() => go(1)} label="Next channel"><ChevronDown size={22} color={ic} /></IconBtn>
                 </>
               ) : (
                 <>
                   <IconBtn onPress={() => seekBy(-10)} label="Back 10 seconds"><RotateCcw size={20} color={ic} /></IconBtn>
-                  <IconBtn onPress={() => setPaused((p) => !p)} label={paused ? 'Play' : 'Pause'} big>
-                    {paused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
+                  <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
+                    {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
                   </IconBtn>
                   <IconBtn onPress={() => seekBy(10)} label="Forward 10 seconds"><RotateCw size={20} color={ic} /></IconBtn>
                 </>
               )}
               <View style={styles.sep} />
-              <IconBtn onPress={() => { setMuted((m) => !m); setAutoMuted(false); }} label={muted ? 'Unmute' : 'Mute'}>
-                {muted ? <VolumeX size={20} color={ic} /> : <Volume2 size={20} color={ic} />}
+              <IconBtn onPress={doMute} label={isMuted ? 'Unmute' : 'Mute'}>
+                {isMuted ? <VolumeX size={20} color={ic} /> : <Volume2 size={20} color={ic} />}
               </IconBtn>
-              <IconBtn onPress={() => setVolume((v) => Math.max(0, +(v - 0.1).toFixed(1)))} label="Volume down"><Minus size={18} color={ic} /></IconBtn>
+              <IconBtn onPress={() => doVolume(-0.1)} label="Volume down"><Minus size={18} color={ic} /></IconBtn>
               <View style={styles.vol}>
-                <View style={[styles.volFill, { width: `${Math.round((muted ? 0 : volume) * 100)}%` }]} />
+                <View style={[styles.volFill, { width: `${Math.round((isMuted ? 0 : vol) * 100)}%` }]} />
               </View>
-              <IconBtn onPress={() => setVolume((v) => Math.min(1, +(v + 0.1).toFixed(1)))} label="Volume up"><Plus size={18} color={ic} /></IconBtn>
+              <IconBtn onPress={() => doVolume(0.1)} label="Volume up"><Plus size={18} color={ic} /></IconBtn>
               <View style={{ flex: 1 }} />
               <TextBtn onPress={() => setFitIdx((i) => (i + 1) % FITS.length)} label={fit.label} icon={<RectangleHorizontal size={18} color={ic} />} />
               <IconBtn onPress={() => setPip((n) => n + 1)} label="Picture in picture"><PictureInPicture2 size={20} color={ic} /></IconBtn>

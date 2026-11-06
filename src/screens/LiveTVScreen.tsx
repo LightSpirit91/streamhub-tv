@@ -12,6 +12,7 @@ import { colors, fonts, qualityLabel, radius, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
 import { ProgramCell, Schedule, useProgramme } from '../components/Guide';
 import { useNow } from '../hooks/useNow';
+import { useCast } from '../player/cast/useCast';
 
 const ROW_H = 68;
 const TUNE_DELAY = 550;
@@ -190,6 +191,20 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
 }
 
 const Preview = memo(function Preview({ channel }: { channel: Channel }) {
+  const castDevice = useCast().device;
+  if (castDevice) {
+    // While casting, nothing plays here: picking a channel sends it to the TV.
+    return (
+      <View style={styles.offline}>
+        <Text style={styles.offlineHead}>Casting to {castDevice}</Text>
+        <Text style={styles.offlineText}>Press Enter or tap a channel twice to put it on the TV.</Text>
+      </View>
+    );
+  }
+  return <LocalPreview channel={channel} />;
+});
+
+const LocalPreview = memo(function LocalPreview({ channel }: { channel: Channel }) {
   const [idx, setIdx] = useState(0);
   const [muted, setMuted] = useState(false);
   const [down, setDown] = useState(false);

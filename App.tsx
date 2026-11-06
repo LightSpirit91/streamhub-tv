@@ -22,6 +22,8 @@ import { BottomTabs, TopBar, type Tab } from './src/components/NavBar';
 import { Wordmark } from './src/components/Wordmark';
 import { colors, fonts } from './src/ui/theme';
 import { useLayout } from './src/ui/layout';
+import { initCast, useCast } from './src/player/cast/useCast';
+import { NowOnTvBar } from './src/components/CastControls';
 
 export default function App() {
   const [fontsReady] = useFonts({
@@ -38,6 +40,14 @@ export default function App() {
   const [playing, setPlaying] = useState<PlayItem | null>(null);
   const [detail, setDetail] = useState<Movie | null>(null);
   const [showDetail, setShowDetail] = useState<Show | null>(null);
+  // Chromecast: remember what's on the TV so the bar can reopen its remote.
+  const castDevice = useCast().device;
+  const [castItem, setCastItem] = useState<PlayItem | null>(null);
+  useEffect(() => initCast(), []);
+  useEffect(() => {
+    if (castDevice && playing) setCastItem(playing);
+    if (!castDevice) setCastItem(null);
+  }, [castDevice, playing]);
 
   useEffect(() => {
     load();
@@ -122,6 +132,7 @@ export default function App() {
       <StatusBar style="light" hidden={!!playing} />
       <TopBar tab={tab} onTab={(t) => { setTab(t); if (t !== 'live') setLiveHub(null); }} compact={L.compact} gutter={L.gutter} />
       <View style={{ flex: 1 }}>{screen}</View>
+      {!playing && castItem ? <NowOnTvBar onOpen={() => setPlaying(castItem)} /> : null}
       {L.compact && <BottomTabs tab={tab} onTab={setTab} />}
       {detail && <MovieDetail movie={detail} onPlay={playMovie} onClose={() => setDetail(null)} />}
       {showDetail && (
