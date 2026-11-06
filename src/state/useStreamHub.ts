@@ -6,7 +6,8 @@ import { loadCatalog, fetchText } from '../core/catalog/loader';
 import { applyHealth } from '../core/catalog/buildCatalog';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
-import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL } from '../core/catalog/sources';
+import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL } from '../core/catalog/sources';
+import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable } from '../core/movies/archive';
 import { detectDevice } from '../services/device';
@@ -58,6 +59,8 @@ interface StreamHubState extends ProfileData {
   byId: Map<string, Channel>;
   movies: Movie[];
   movieById: Map<string, Movie>;
+  shows: Show[];
+  showById: Map<string, Show>;
   /** TV guide: channel id -> programmes [start, end, title, desc?, category?] */
   epg: Record<string, Programme[]>;
   loadEpg(): Promise<void>;
@@ -106,6 +109,25 @@ async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
   }
 }
 
+async function loadShows(force: boolean): Promise<Show[]> {
+  const KEY = 'shows.v1.json';
+  try {
+    if (!force) {
+      const raw = await fileBlobStore.read(KEY);
+      if (raw) {
+        const c = JSON.parse(raw) as ShowCatalog & { savedAt: number };
+        if (Date.now() - c.savedAt < DAY) return c.shows;
+      }
+    }
+    const c = JSON.parse(await fetchText(STREAMHUB_SHOWS_URL, globalThis.fetch as never, 30_000)) as ShowCatalog;
+    await fileBlobStore.write(KEY, JSON.stringify({ ...c, savedAt: Date.now() }));
+    return c.shows.filter((x) => isWatchable({ title: x.title, description: x.description }));
+  } catch {
+    const raw = await fileBlobStore.read(KEY).catch(() => null);
+    return raw ? (JSON.parse(raw) as ShowCatalog).shows : [];
+  }
+}
+
 let healthTimer: ReturnType<typeof setTimeout> | undefined;
 const empty: ProfileData = { favorites: [], recents: [], movieList: [], movieProgress: {} };
 
@@ -119,6 +141,8 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
   movies: [],
   movieById: new Map(),
   epg: {},
+  shows: [],
+  showById: new Map(),
   health: readJSON<Record<string, StreamHealth>>('health', {}),
 
   selectProfile(p) {
@@ -152,6 +176,7 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
     if (!get().channels.length) set({ status: 'loading', error: undefined });
     get().loadEpg();
     loadMovies(force).then((movies) => set({ movies, movieById: new Map(movies.map((m) => [m.id, m])) }));
+    loadShows(force).then((shows) => set({ shows, showById: new Map(shows.map((x) => [x.id, x])) }));
     try {
       const { catalog } = await getCatalog({
         store: fileBlobStore,

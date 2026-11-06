@@ -1,17 +1,18 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Film, Heart, Home, Library, Search, Tv } from 'lucide-react-native';
+import { Clapperboard, Film, Heart, Home, Library, Search, Tv } from 'lucide-react-native';
 import { PROFILES, useStreamHub } from '../state/useStreamHub';
 import { colors, fonts } from '../ui/theme';
 import { useFocusRing } from '../ui/primitives';
 import { Wordmark } from './Wordmark';
 
-export type Tab = 'home' | 'live' | 'movies' | 'mylist' | 'search';
+export type Tab = 'home' | 'live' | 'movies' | 'shows' | 'mylist' | 'search';
 
 const TABS: { id: Tab; label: string; Icon: typeof Home }[] = [
   { id: 'home', label: 'Home', Icon: Home },
   { id: 'live', label: 'Live TV', Icon: Tv },
   { id: 'movies', label: 'Movies', Icon: Film },
+  { id: 'shows', label: 'Shows', Icon: Clapperboard },
   { id: 'mylist', label: 'My List', Icon: Library },
   { id: 'search', label: 'Search', Icon: Search },
 ];

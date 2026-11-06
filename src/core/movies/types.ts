@@ -23,7 +23,7 @@ export interface Movie {
   cast?: string[];
   country?: string;
   wikipedia?: string;
-  source: 'archive';
+  source: 'archive' | 'youtube';
   /** Popularity at the source, used for ordering. */
   popularity: number;
 }

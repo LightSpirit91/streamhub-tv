@@ -44,6 +44,12 @@ jobs:
         continue-on-error: true
         env:
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+      - run: npx tsx scripts/show-doctor.ts --limit 2500 --previous prev/shows.json --out dist
+        continue-on-error: true
+      - run: npx tsx scripts/youtube-doctor.ts --previous prev --out dist
+        continue-on-error: true
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
         continue-on-error: true
       - name: Publish to catalog branch
@@ -57,4 +63,4 @@ jobs:
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary
-        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/shows-report.md dist/youtube-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

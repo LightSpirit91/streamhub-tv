@@ -7,6 +7,7 @@ import {
 } from 'lucide-react-native';
 import type { Channel, Stream } from '../core/types';
 import type { Movie } from '../core/movies/types';
+import type { Show } from '../core/shows/types';
 import { FailoverController, zap, type FailoverState } from '../core/health/failover';
 import { useStreamHub } from '../state/useStreamHub';
 import { useRemote } from '../tv/useRemote';
@@ -27,7 +28,19 @@ const HIDE_MS = 4_000;
 
 export type PlayItem =
   | { kind: 'live'; channel: Channel; row: Channel[] }
-  | { kind: 'movie'; movie: Movie; fromStart?: boolean };
+  | { kind: 'movie'; movie: Movie; fromStart?: boolean }
+  | { kind: 'episode'; show: Show; index: number; fromStart?: boolean };
+
+/** Episodes play through the movie path: same scrubber, resume and progress. */
+function asMovie(item: Exclude<PlayItem, { kind: 'live' }>): Movie {
+  if (item.kind === 'movie') return item.movie;
+  const ep = item.show.episodes[item.index];
+  const se = ep.season ? `S${ep.season} E${ep.episode ?? item.index + 1}` : `Episode ${ep.episode ?? item.index + 1}`;
+  return {
+    id: ep.id, title: `${item.show.title}: ${ep.title}`, year: item.show.year, genres: [se, ...item.show.genres.slice(0, 1)],
+    description: item.show.description, poster: item.show.poster, url: ep.url, minutes: ep.minutes, source: item.show.source, popularity: 0,
+  };
+}
 
 interface Props {
   item: PlayItem;
@@ -36,7 +49,8 @@ interface Props {
 }
 
 function movieStream(m: Movie): Stream {
-  return { url: m.url, height: 0, geoBlocked: false, notAlwaysOn: false, trust: 'public', format: 'progressive', source: 'archive', score: 0 };
+  const format = /youtube(-nocookie)?\.com\/embed\//.test(m.url) ? 'youtube' : 'progressive';
+  return { url: m.url, height: 0, geoBlocked: false, notAlwaysOn: false, trust: 'public', format, source: m.source, score: 0 };
 }
 
 const fmt = (s: number) => {
@@ -50,16 +64,16 @@ const fmt = (s: number) => {
 export function PlayerScreen({ item, onChange, onClose }: Props) {
   const live = item.kind === 'live';
   const channel = live ? item.channel : undefined;
-  const movie = !live ? item.movie : undefined;
-  const id = live ? item.channel.id : item.movie.id;
-  const streams = useMemo(() => (live ? item.channel.streams : [movieStream(item.movie)]), [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const movie = item.kind !== 'live' ? asMovie(item) : undefined;
+  const id = live ? item.channel.id : movie!.id;
+  const streams = useMemo(() => (live ? item.channel.streams : [movieStream(movie!)]), [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reportStream = useStreamHub((s) => s.reportStream);
   const markWatched = useStreamHub((s) => s.markWatched);
   const toggleFavorite = useStreamHub((s) => s.toggleFavorite);
   const toggleMovie = useStreamHub((s) => s.toggleMovie);
   const saveProgress = useStreamHub((s) => s.saveMovieProgress);
-  const saved = useStreamHub((s) => (live ? s.favorites.includes(id) : s.movieList.includes(id)));
+  const saved = useStreamHub((s) => (live ? s.favorites.includes(id) : s.movieList.includes(item.kind === 'episode' ? item.show.id : id)));
   const resumeAt = useStreamHub((s) => (!live && !(item as { fromStart?: boolean }).fromStart ? s.movieProgress[id] ?? 0 : 0));
 
   const ctrl = useMemo(() => new FailoverController(streams), [streams]);
@@ -233,7 +247,12 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           seek={seek}
           startAt={resumeAt > 60 ? resumeAt : undefined}
           onTime={onTime}
-          onEnded={() => !live && saveProgress(id, 0)}
+          onEnded={() => {
+            if (live) return;
+            saveProgress(id, 0);
+            // Series: roll straight into the next episode.
+            if (item.kind === 'episode' && item.index + 1 < item.show.episodes.length) onChange({ ...item, index: item.index + 1, fromStart: true });
+          }}
           onPlaying={handlePlaying}
           onError={handleError}
           onAutoMuted={() => setAutoMuted(true)}
@@ -290,7 +309,10 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
                 </Text>
               ) : null}
             </View>
-            <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
+            {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
+              <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
+            ) : null}
+            <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(item.kind === 'episode' ? item.show.id : id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
               <Heart size={22} color={saved ? colors.gold : ic} fill={saved ? colors.gold : 'transparent'} />
             </IconBtn>
           </View>

@@ -13,6 +13,9 @@ import { MoviesScreen } from './src/screens/MoviesScreen';
 import { MovieDetail } from './src/screens/MovieDetail';
 import { MyListScreen } from './src/screens/MyListScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
+import { ShowsScreen } from './src/screens/ShowsScreen';
+import { ShowDetail } from './src/screens/ShowDetail';
+import type { Show } from './src/core/shows/types';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PlayerScreen, type PlayItem } from './src/player/PlayerScreen';
 import { BottomTabs, TopBar, type Tab } from './src/components/NavBar';
@@ -34,6 +37,7 @@ export default function App() {
   const [liveHub, setLiveHub] = useState<HubId | null>(null);
   const [playing, setPlaying] = useState<PlayItem | null>(null);
   const [detail, setDetail] = useState<Movie | null>(null);
+  const [showDetail, setShowDetail] = useState<Show | null>(null);
 
   useEffect(() => {
     load();
@@ -54,9 +58,14 @@ export default function App() {
     setTab('home');
     setPlaying(null);
     setDetail(null);
+    setShowDetail(null);
   }, [profile]);
 
   const playChannel = useCallback((channel: Channel, row: Channel[]) => setPlaying({ kind: 'live', channel, row }), []);
+  const playEpisode = useCallback((show: Show, index: number) => {
+    setShowDetail(null);
+    setPlaying({ kind: 'episode', show, index });
+  }, []);
   const playMovie = useCallback((movie: Movie, fromStart?: boolean) => {
     setDetail(null);
     setPlaying({ kind: 'movie', movie, fromStart });
@@ -87,6 +96,8 @@ export default function App() {
         return <LiveTVScreen initialHub={liveHub} onFullscreen={playChannel} />;
       case 'movies':
         return <MoviesScreen onOpen={setDetail} onPlay={playMovie} />;
+      case 'shows':
+        return <ShowsScreen onOpen={setShowDetail} onPlay={playEpisode} />;
       case 'mylist':
         return <MyListScreen onPlay={playChannel} onMovie={setDetail} />;
       case 'search':
@@ -113,6 +124,7 @@ export default function App() {
       <View style={{ flex: 1 }}>{screen}</View>
       {L.compact && <BottomTabs tab={tab} onTab={setTab} />}
       {detail && <MovieDetail movie={detail} onPlay={playMovie} onClose={() => setDetail(null)} />}
+      {showDetail && <ShowDetail show={showDetail} onPlay={playEpisode} onClose={() => setShowDetail(null)} />}
       {playing && <PlayerScreen item={playing} onChange={setPlaying} onClose={() => setPlaying(null)} />}
     </View>
   );
