@@ -144,6 +144,17 @@ describe('buildCatalog', () => {
   });
 });
 
+describe('country fallback', () => {
+  it('labels channels without tvg-id by the country file they came from', () => {
+    const c = buildCatalog([{
+      source: { id: 'iptv-org:raw:ca_pluto' },
+      entries: parseM3U('#EXTINF:-1 tvg-id="",UFC (720p)\nhttps://jmp2.uk/plu-1.m3u8\n#EXTINF:-1 tvg-id="CBSNews247.us@SD",CBS News 24/7\nhttps://jmp2.uk/plu-2.m3u8\n'),
+    }]);
+    expect(c.channels.find((x) => x.name === 'UFC')?.country).toBe('CA');
+    expect(c.channels.find((x) => x.name === 'CBS News 24/7')?.country).toBe('US');
+  });
+});
+
 describe('language feeds', () => {
   it('routes Russian-language channels from other countries into Russian TV', () => {
     const c = buildCatalog([{

@@ -22,9 +22,12 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
   const map = new Map<string, Channel>();
 
   for (const { source, entries } of batches) {
+    // "iptv-org:raw:ca_pluto" -> CA. Used when an entry has no tvg-id, so a
+    // channel from the Pluto TV Canada lineup is labelled Canada, not unknown.
+    const sourceCountry = /^iptv-org:(?:country|raw):([a-z]{2})(?:_|$)/.exec(source.id)?.[1].toUpperCase();
     for (const e of entries) {
       const info = parseName(e.name);
-      const country = e.country === 'GB' ? 'UK' : e.country ?? countryFromTvgId(e.tvgId);
+      const country = (e.country === 'GB' ? 'UK' : e.country) ?? countryFromTvgId(e.tvgId) ?? sourceCountry;
       if (source.countryFilter && !source.countryFilter.has(country ?? 'INT')) continue;
 
       const cats = e.groups
