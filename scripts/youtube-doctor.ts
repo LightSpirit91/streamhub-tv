@@ -66,7 +66,7 @@ async function yt<T>(path: string, params: Record<string, string>): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-interface Snip { title: string; description: string; thumbnails?: Record<string, { url: string }>; publishedAt?: string; channelTitle?: string }
+interface Snip { title: string; description: string; liveBroadcastContent?: string; thumbnails?: Record<string, { url: string }>; publishedAt?: string; channelTitle?: string }
 
 async function resolveChannel(s: Source, cache: Record<string, string>): Promise<string | undefined> {
   if (cache[s.query]) return cache[s.query];
@@ -98,7 +98,8 @@ async function videos(ids: string[]): Promise<Video[]> {
     const r = await yt<{ items: { id: string; snippet: Snip; contentDetails: { duration: string }; status: { embeddable: boolean }; statistics?: { viewCount?: string } }[] }>('videos', {
       part: 'snippet,contentDetails,status,statistics', id: ids.slice(i, i + 50).join(','),
     });
-    for (const v of r.items) out.push({ id: v.id, minutes: minutesOf(v.contentDetails.duration), snippet: v.snippet, embeddable: v.status.embeddable, views: Number(v.statistics?.viewCount ?? 0) });
+    // Skip live streams and premieres: only finished films and episodes.
+    for (const v of r.items.filter((x) => !x.snippet.liveBroadcastContent || x.snippet.liveBroadcastContent === 'none')) out.push({ id: v.id, minutes: minutesOf(v.contentDetails.duration), snippet: v.snippet, embeddable: v.status.embeddable, views: Number(v.statistics?.viewCount ?? 0) });
   }
   return out;
 }
