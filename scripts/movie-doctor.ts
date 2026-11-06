@@ -27,7 +27,7 @@ const LIMIT = Number(arg('--limit', '5000'));
 const PREVIOUS = arg('--previous', 'prev/movies.json');
 const OUT = arg('--out', 'dist');
 const OMDB_KEY = process.env.OMDB_API_KEY;
-const OMDB_DAILY = 900;
+const OMDB_DAILY = 850; // the other 150 of the 1,000 free daily lookups go to TV series
 const UA = { 'User-Agent': 'StreamHub-MovieDoctor/1.1 (+https://github.com/LightSpirit91/streamhub-tv)' };
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -44,6 +44,17 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
     await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
   }
   throw new Error(`Failed: ${url}`);
+}
+
+/** OMDb call that never puts the key into an error message or log line. */
+async function omdb<T>(query: string): Promise<T> {
+  try {
+    const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_KEY}&${query}`, { headers: UA });
+    if (!res.ok) throw new Error(`OMDb HTTP ${res.status}`);
+    return (await res.json()) as T;
+  } catch {
+    throw new Error('OMDb request failed');
+  }
 }
 
 async function search(sort: string, max: number): Promise<SearchDoc[]> {
@@ -137,9 +148,7 @@ async function main() {
       .slice(0, OMDB_DAILY);
     await pool(todo, 6, async (m) => {
       try {
-        const r = await json<{ imdbRating?: string; imdbVotes?: string; Director?: string; Actors?: string; Response?: string }>(
-          `https://www.omdbapi.com/?apikey=${OMDB_KEY}&i=${m.imdbId}`,
-        );
+        const r = await omdb<{ imdbRating?: string; imdbVotes?: string; Director?: string; Actors?: string; Response?: string }>(`i=${m.imdbId}`);
         if (r.Response !== 'True') return;
         const rating = Number(r.imdbRating);
         m.imdbRating = Number.isFinite(rating) ? rating : 0;

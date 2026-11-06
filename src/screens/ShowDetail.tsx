@@ -38,6 +38,13 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
           ListHeaderComponent={
             <View style={{ gap: 12, marginBottom: 14 }}>
               <Text style={styles.title}>{show.title}</Text>
+              {show.imdbRating ? (
+                <View style={styles.imdb}>
+                  <Text style={styles.imdbLogo}>IMDb</Text>
+                  <Text style={styles.imdbScore}>{show.imdbRating.toFixed(1)}</Text>
+                  <Text style={styles.meta}>/10{show.imdbVotes ? `  ·  ${show.imdbVotes.toLocaleString()} votes` : ''}</Text>
+                </View>
+              ) : null}
               <Text style={styles.meta}>
                 {[show.year, `${show.episodes.length} episodes`, show.genres.join(' · '), show.language, show.country].filter(Boolean).join('   ')}
               </Text>
@@ -56,6 +63,7 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
                 />
               </View>
               {show.description ? <Text style={styles.desc} numberOfLines={4}>{show.description}</Text> : null}
+              {show.cast?.length ? <Text style={styles.meta}>Starring {show.cast.slice(0, 5).join(', ')}</Text> : null}
               {seasons.length > 1 ? (
                 <View style={styles.seasons}>
                   {seasons.map((s) => (
@@ -115,6 +123,12 @@ const styles = StyleSheet.create({
   sheetPhone: { position: 'absolute', left: 0, right: 0, bottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, height: '90%' },
   title: { ...type.h1, color: colors.text, fontSize: 34, paddingRight: 40 },
   meta: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 14 },
+  imdb: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  imdbLogo: {
+    backgroundColor: '#F5C518', color: '#000', fontFamily: fonts.displayHeavy, fontSize: 12, paddingHorizontal: 5,
+    paddingVertical: 1, borderRadius: 3, overflow: 'hidden',
+  },
+  imdbScore: { color: colors.text, fontFamily: fonts.display, fontSize: 16 },
   desc: { color: colors.text, opacity: 0.88, fontFamily: fonts.body, fontSize: 14.5, lineHeight: 22 },
   seasons: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 },
   chip: { paddingHorizontal: 14, height: 34, justifyContent: 'center', borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.bgRaised },

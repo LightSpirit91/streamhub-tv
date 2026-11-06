@@ -15,6 +15,20 @@ const LIMIT = Number(arg('--limit', '2500'));
 const PREVIOUS = arg('--previous', 'prev/shows.json');
 const OUT = arg('--out', 'dist');
 const UA = { 'User-Agent': 'StreamHub-ShowDoctor/1.0 (+https://github.com/LightSpirit91/streamhub-tv)' };
+const OMDB_KEY = process.env.OMDB_API_KEY;
+const OMDB_DAILY = 150;
+
+/** OMDb series lookup by title; the key never reaches an error message or log. */
+async function omdbSeries(title: string, year?: number) {
+  try {
+    const q = new URLSearchParams({ t: title, type: 'series', ...(year ? { y: String(year) } : {}) });
+    const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_KEY}&${q}`, { headers: UA });
+    const r = (await res.json()) as { Response?: string; imdbID?: string; imdbRating?: string; imdbVotes?: string; Actors?: string; Plot?: string; Title?: string };
+    return r.Response === 'True' ? r : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function json<T>(url: string): Promise<T> {
   for (let i = 0; i < 3; i++) {
@@ -80,6 +94,23 @@ async function main() {
     .filter((s) => s.episodes.length >= 2)
     .map((s) => ({ ...s, episodes: s.episodes.sort(order) }))
     .sort((a, b) => b.popularity - a.popularity);
+  // IMDb ratings for the most-watched series (title match, 150 a night).
+  let rated = 0;
+  if (OMDB_KEY) {
+    const todo = list.filter((x) => x.imdbRating === undefined).slice(0, OMDB_DAILY);
+    for (const show of todo) {
+      const r = await omdbSeries(show.title, show.year);
+      show.imdbRating = r ? Number(r.imdbRating) || 0 : 0; // 0 = looked up, no rating
+      if (!r) continue;
+      show.imdbId = r.imdbID;
+      show.imdbVotes = Number(String(r.imdbVotes ?? '').replace(/,/g, '')) || undefined;
+      if (r.Actors && r.Actors !== 'N/A') show.cast = r.Actors.split(', ');
+      if (!show.description && r.Plot && r.Plot !== 'N/A') show.description = r.Plot;
+      rated++;
+    }
+  }
+  console.log(OMDB_KEY ? `series ratings looked up: ${rated}` : 'series ratings: skipped (no OMDB_API_KEY secret)');
+
   // Keep YouTube shows from the previous build; youtube-doctor refreshes them.
   const yt = (prev?.shows ?? []).filter((s) => s.source === 'youtube');
   const catalog: ShowCatalog = { version: 1, builtAt: now, shows: [...list, ...yt] };

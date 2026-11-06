@@ -16,6 +16,10 @@ export interface Show {
   year?: number;
   language?: string;
   country?: string;
+  imdbId?: string;
+  imdbRating?: number;
+  imdbVotes?: number;
+  cast?: string[];
   source: 'archive' | 'youtube';
   popularity: number;
   addedAt?: number;

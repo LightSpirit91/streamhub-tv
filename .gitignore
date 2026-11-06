@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Secrets never go in git (API keys live in GitHub Actions secrets)
+.env
+.env.*
+!.env.example

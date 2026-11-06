@@ -26,7 +26,7 @@ export function ShowCard({ show, width, onPress }: { show: Show; width: number; 
         <Text style={styles.epCount}>{show.episodes.length} episodes</Text>
       </View>
       <Text numberOfLines={1} style={styles.title}>{show.title}</Text>
-      <Text numberOfLines={1} style={styles.meta}>{[show.year, show.genres[0], show.language && show.language !== 'English' ? show.language : null].filter(Boolean).join('  ·  ')}</Text>
+      <Text numberOfLines={1} style={styles.meta}>{[show.imdbRating ? `★ ${show.imdbRating.toFixed(1)}` : null, show.year, show.genres[0], show.language && show.language !== 'English' ? show.language : null].filter(Boolean).join('  ·  ')}</Text>
     </Pressable>
   );
 }
