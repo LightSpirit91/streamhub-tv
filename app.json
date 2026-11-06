@@ -67,6 +67,7 @@
         }
       ],
       "expo-localization"
-    ]
+    ],
+    "owner": "arkadiikr"
   }
 }
