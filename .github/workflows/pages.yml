@@ -12,9 +12,11 @@ permissions:
   pages: write
   id-token: write
 
+# Queue deploys instead of cancelling them, so a quick second push never
+# shows up as a red "cancelled" run in your inbox.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
