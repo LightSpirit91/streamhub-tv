@@ -140,20 +140,6 @@ export const SOURCES: PlaylistSource[] = [
     ],
     format: 'famelack' as const,
   })),
-  // Free ad-supported lineups (official streams), via Matt Huisman's public
-  // playlists: The Roku Channel and Pluto TV (incl. Pluto TV Latino).
-  ...(
-    [
-      ['roku', 'all', 'US'], ['pluto', 'us', 'US'], ['pluto', 'ca', 'CA'], ['pluto', 'mx', 'MX'], ['pluto', 'ar', 'AR'],
-      ['pluto', 'cl', 'CL'], ['pluto', 'co', 'CO'], ['pluto', 'pe', 'PE'],
-    ] as const
-  ).map(([svc, region, cc]) => ({
-    id: `mjh:${region}_${svc}`,
-    label: `${svc === 'pluto' ? 'Pluto TV' : 'The Roku Channel'} ${region.toUpperCase()}`,
-    urls: [`https://i.mjh.nz/${svc === 'pluto' ? 'PlutoTV' : 'Roku'}/${region}.m3u8`],
-    country: cc,
-    byName: true,
-  })),
   // Samsung TV Plus and Plex are not shown. Their lineups are loaded only as
   // block lists: the same filler streams also appear inside the big country
   // playlists under other hosts, and this removes them there too.
@@ -161,12 +147,6 @@ export const SOURCES: PlaylistSource[] = [
     id: `deny:${file}`,
     label: `Blocked: ${file}`,
     urls: [`${IPTV_ORG_RAW}/${file}.m3u`],
-    deny: true,
-  })),
-  ...['SamsungTVPlus/us', 'SamsungTVPlus/ca', 'SamsungTVPlus/mx', 'Plex/us', 'Plex/ca'].map((path) => ({
-    id: `deny:mjh:${path}`,
-    label: `Blocked: ${path}`,
-    urls: [`https://i.mjh.nz/${path}.m3u8`],
     deny: true,
   })),
   {
