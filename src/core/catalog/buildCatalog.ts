@@ -88,7 +88,7 @@ export function byRank(a: Channel, b: Channel): number {
   return b.popularity - a.popularity || (b.streams[0]?.score ?? 0) - (a.streams[0]?.score ?? 0);
 }
 
-function assignSpotlight(channels: Channel[]): void {
+export function assignSpotlight(channels: Channel[]): void {
   const ranked = channels
     .filter((c) => c.streams[0] && c.streams[0].trust !== 'unverified' && !c.streams[0].geoBlocked)
     .map((c) => [c, spotlightScore(c)] as const)

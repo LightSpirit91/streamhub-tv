@@ -15,7 +15,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadCatalog } from '../src/core/catalog/loader';
 import { SOURCES } from '../src/core/catalog/sources';
-import { finalizeChannel } from '../src/core/catalog/buildCatalog';
+import { assignSpotlight, byRank, finalizeChannel } from '../src/core/catalog/buildCatalog';
 import { HUBS } from '../src/core/catalog/hubs';
 import type { Channel, Stream } from '../src/core/types';
 import { channelsCsv, channelsMarkdown } from './channel-list';
@@ -78,6 +78,10 @@ async function main() {
   if (CHECK) {
     tally = await checkAll(catalog.channels);
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
+    // finalizeChannel re-classifies, which clears Spotlight: pick it again
+    // from the verified streams, then restore row order.
+    assignSpotlight(catalog.channels);
+    catalog.channels.sort(byRank);
   }
 
   const counts = HUBS.map((h) => [h.title, catalog.channels.filter((c) => c.hubs.includes(h.id)).length] as const);
