@@ -45,15 +45,28 @@ jobs:
       cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.second.outputs.page_url || steps.first.outputs.page_url }}
+      url: ${{ steps.third.outputs.page_url || steps.second.outputs.page_url || steps.first.outputs.page_url }}
+    # GitHub Pages sometimes answers "Deployment failed, try again later" when
+    # it is busy. Retrying instantly hits the same wall, so wait in between:
+    # attempt 1, wait 2 min, attempt 2, wait 5 min, attempt 3.
     steps:
       - id: first
         uses: actions/deploy-pages@v4
         continue-on-error: true
         with:
-          timeout: 1800000
+          timeout: 600000
+      - if: steps.first.outcome == 'failure'
+        run: sleep 120
       - id: second
         if: steps.first.outcome == 'failure'
         uses: actions/deploy-pages@v4
+        continue-on-error: true
         with:
-          timeout: 1800000
+          timeout: 600000
+      - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+        run: sleep 300
+      - id: third
+        if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 600000
