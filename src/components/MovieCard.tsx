@@ -24,7 +24,7 @@ function MovieCardBase({ movie, width, progress, onPress }: Props) {
       style={[styles.card, { width }, f.on && { transform: [{ scale: 1.05 }], zIndex: 2 }]}
     >
       <View style={[styles.poster, { height: Math.round(width * 1.48) }, f.on && styles.posterOn]}>
-        <Image source={{ uri: movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={movie.id} />
+        <Image source={{ uri: movie.posterHi ?? movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={movie.id} />
         {progress ? (
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${Math.min(100, Math.round(progress * 100))}%` }]} />

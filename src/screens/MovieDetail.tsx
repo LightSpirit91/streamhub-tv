@@ -1,7 +1,8 @@
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, ExternalLink, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
+import { Check, ExternalLink, Film, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
+import { CastRow, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
 import type { Movie } from '../core/movies/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { Button } from '../ui/primitives';
@@ -12,6 +13,12 @@ interface Props {
   movie: Movie;
   onPlay(m: Movie, fromStart?: boolean): void;
   onClose(): void;
+}
+
+/** A trailer plays through the movie player as a tiny pseudo-movie. */
+export function trailerOf(m: { id: string; title: string; trailer?: string; poster: string }): Movie | null {
+  if (!m.trailer) return null;
+  return { id: `trailer:${m.id}`, title: `${m.title} · Trailer`, genres: ['Trailer'], description: '', poster: m.poster, url: m.trailer, source: 'youtube', popularity: 0 };
 }
 
 const fmtMin = (m?: number) => (m ? `${Math.floor(m / 60) ? `${Math.floor(m / 60)}h ` : ''}${m % 60}m` : undefined);
@@ -39,14 +46,16 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, L.compact ? styles.sheetPhone : { width: Math.min(960, L.width - 80) }]}>
-        <Image source={{ uri: movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={50} />
-        <LinearGradient colors={['rgba(6,7,11,0.55)', 'rgba(6,7,11,0.97)']} style={StyleSheet.absoluteFill} />
+        <Image source={{ uri: movie.backdrop ?? movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={movie.backdrop ? 0 : 50} />
+        <LinearGradient colors={movie.backdrop ? ['rgba(6,7,11,0.25)', 'rgba(6,7,11,0.92)', 'rgba(6,7,11,0.99)'] : ['rgba(6,7,11,0.55)', 'rgba(6,7,11,0.97)']} style={StyleSheet.absoluteFill} />
         <ScrollView contentContainerStyle={[styles.inner, L.compact && { flexDirection: 'column' }]}>
-          <Image source={{ uri: movie.poster }} style={[styles.poster, L.compact && { width: 150, height: 222 }]} contentFit="cover" />
+          <Image source={{ uri: movie.posterHi ?? movie.poster }} style={[styles.poster, L.compact && { width: 150, height: 222 }]} contentFit="cover" />
           <View style={{ flex: 1, gap: 12 }}>
             <Text style={styles.title}>{movie.title}</Text>
+            {movie.tagline ? <Text style={styles.tagline}>{movie.tagline}</Text> : null}
 
             <View style={styles.badges}>
+              {!movie.imdbRating && movie.tmdbRating ? <Text style={styles.pill}>{`TMDB ${movie.tmdbRating.toFixed(1)}`}</Text> : null}
               {movie.imdbRating ? (
                 <View style={styles.imdb}>
                   <Text style={styles.imdbLogo}>IMDb</Text>
@@ -72,6 +81,9 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
               {resumeAt > 60 ? (
                 <Button label="Start over" icon={<RotateCcw size={16} color={colors.text} />} onPress={() => onPlay(movie, true)} />
               ) : null}
+              {trailerOf(movie) ? (
+                <Button label="Trailer" icon={<Film size={16} color={colors.text} />} onPress={() => onPlay(trailerOf(movie)!, true)} />
+              ) : null}
               <Button
                 label={inList ? 'In My Movies' : 'My Movies'}
                 icon={inList ? <Check size={18} color={colors.text} /> : <Plus size={18} color={colors.text} />}
@@ -92,6 +104,8 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
                 ))}
             </View>
 
+            <CastRow cast={movie.castPhotos} />
+            <WhereToWatch watch={movie.watch} />
             {canOpenLinks && (movie.imdbId || movie.wikipedia) ? (
               <View style={styles.links}>
                 {movie.imdbId ? (
@@ -114,7 +128,10 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
                 ) : null}
               </View>
             ) : null}
-            <Text style={styles.source}>Free from the Internet Archive. Credits from Wikidata{movie.imdbRating ? ', rating from IMDb' : ''}.</Text>
+            <Text style={styles.source}>
+              {movie.source === 'youtube' ? 'Free from the official channel on YouTube.' : 'Free from the Internet Archive.'} Credits from Wikidata{movie.imdbRating ? ', rating from IMDb' : ''}.
+            </Text>
+            {movie.tmdbId ? <TmdbCredit /> : null}
           </View>
         </ScrollView>
         <Pressable style={styles.close} onPress={onClose} accessibilityLabel="Close">
@@ -135,6 +152,7 @@ const styles = StyleSheet.create({
   inner: { flexDirection: 'row', gap: 28, padding: 32 },
   poster: { width: 230, height: 340, borderRadius: 12, borderWidth: 1, borderColor: colors.lineHi },
   title: { ...type.h1, color: colors.text, fontSize: 34 },
+  tagline: { color: colors.gold, fontFamily: fonts.bodySemi, fontSize: 15, fontStyle: 'italic', marginTop: -4 },
   badges: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   imdb: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingRight: 10, height: 28,

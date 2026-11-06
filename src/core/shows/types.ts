@@ -1,3 +1,5 @@
+import type { TmdbMeta } from '../meta/tmdb';
+
 export interface Episode {
   id: string;
   title: string;
@@ -7,7 +9,7 @@ export interface Episode {
   minutes?: number;
 }
 
-export interface Show {
+export interface Show extends TmdbMeta {
   id: string;
   title: string;
   poster: string;

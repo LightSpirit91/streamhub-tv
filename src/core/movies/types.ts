@@ -1,4 +1,6 @@
-export interface Movie {
+import type { TmdbMeta } from '../meta/tmdb';
+
+export interface Movie extends TmdbMeta {
   id: string;
   title: string;
   year?: number;

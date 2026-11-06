@@ -141,7 +141,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const onTime = useCallback(
     (cur: number, dur: number) => {
       setTime({ cur, dur });
-      if (!live && cur - lastSave.current > 10) {
+      if (!live && !id.startsWith('trailer:') && cur - lastSave.current > 10) {
         lastSave.current = cur;
         saveProgress(id, dur && cur > dur - 120 ? 0 : cur);
       }

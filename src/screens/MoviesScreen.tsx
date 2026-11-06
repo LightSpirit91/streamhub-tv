@@ -160,7 +160,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 56 }}>
       {chipBar}
       <View style={[styles.hero, { marginHorizontal: L.gutter }]}>
-        <Image source={{ uri: hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={40} transition={500} />
+        <Image source={{ uri: hero.backdrop ?? hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={hero.backdrop ? 0 : 40} transition={500} />
         <LinearGradient colors={['rgba(6,7,11,0.3)', 'rgba(6,7,11,0.96)']} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroInner, L.compact && { flexDirection: 'column-reverse', alignItems: 'flex-start' }]}>
           <View style={{ flex: 1, gap: 12 }}>
@@ -182,7 +182,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
               ))}
             </View>
           </View>
-          <Image source={{ uri: hero.poster }} style={[styles.heroPoster, L.compact && { width: 110, height: 163 }]} contentFit="cover" transition={400} />
+          <Image source={{ uri: hero.posterHi ?? hero.poster }} style={[styles.heroPoster, L.compact && { width: 110, height: 163 }]} contentFit="cover" transition={400} />
         </View>
       </View>
 
@@ -235,7 +235,7 @@ function TopTen({ movie, rank, width, onPress }: { movie: Movie; rank: number; w
     <Pressable onPress={() => onPress(movie)} {...f.handlers} style={[styles.top10, f.on && { transform: [{ scale: 1.05 }], zIndex: 2 }]} accessibilityLabel={`${rank}. ${movie.title}`}>
       <Text style={[styles.rank, { fontSize: h * 0.72, lineHeight: h * 0.86 }]}>{rank}</Text>
       <View style={[styles.topPoster, { width, height: h, marginLeft: -h * 0.12 }, f.on && { borderColor: colors.focus, borderWidth: 2 }]}>
-        <Image source={{ uri: movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={movie.id} />
+        <Image source={{ uri: movie.posterHi ?? movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={movie.id} />
       </View>
     </Pressable>
   );

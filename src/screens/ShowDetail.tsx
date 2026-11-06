@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, Play, Plus, X } from 'lucide-react-native';
+import { Check, Film, Play, Plus, X } from 'lucide-react-native';
+import { CastRow, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
 import type { Show } from '../core/shows/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { Button, useFocusRing } from '../ui/primitives';
@@ -12,10 +13,11 @@ import { useLayout } from '../ui/layout';
 interface Props {
   show: Show;
   onPlay(s: Show, index: number): void;
+  onTrailer?(url: string, title: string): void;
   onClose(): void;
 }
 
-export function ShowDetail({ show, onPlay, onClose }: Props) {
+export function ShowDetail({ show, onPlay, onTrailer, onClose }: Props) {
   const L = useLayout();
   const progress = useStreamHub((s) => s.movieProgress);
   const inList = useStreamHub((s) => s.movieList.includes(show.id));
@@ -29,7 +31,7 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, L.compact ? styles.sheetPhone : { width: Math.min(960, L.width - 80) }]}>
-        <Image source={{ uri: show.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={40} />
+        <Image source={{ uri: show.backdrop ?? show.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={show.backdrop ? 0 : 40} />
         <LinearGradient colors={['rgba(6,7,11,0.6)', 'rgba(6,7,11,0.98)']} style={StyleSheet.absoluteFill} />
         <FlatList
           data={list}
@@ -38,6 +40,7 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
           ListHeaderComponent={
             <View style={{ gap: 12, marginBottom: 14 }}>
               <Text style={styles.title}>{show.title}</Text>
+              {show.tagline ? <Text style={styles.tagline}>{show.tagline}</Text> : null}
               {show.imdbRating ? (
                 <View style={styles.imdb}>
                   <Text style={styles.imdbLogo}>IMDb</Text>
@@ -56,6 +59,9 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
                   onPress={() => onPlay(show, Math.max(0, resume))}
                   preferredFocus
                 />
+                {show.trailer && onTrailer ? (
+                  <Button label="Trailer" icon={<Film size={16} color={colors.text} />} onPress={() => onTrailer(show.trailer!, show.title)} />
+                ) : null}
                 <Button
                   label={inList ? 'In My List' : 'My List'}
                   icon={inList ? <Check size={18} color={colors.text} /> : <Plus size={18} color={colors.text} />}
@@ -63,7 +69,9 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
                 />
               </View>
               {show.description ? <Text style={styles.desc} numberOfLines={4}>{show.description}</Text> : null}
-              {show.cast?.length ? <Text style={styles.meta}>Starring {show.cast.slice(0, 5).join(', ')}</Text> : null}
+              {show.castPhotos?.length ? <CastRow cast={show.castPhotos} /> : show.cast?.length ? <Text style={styles.meta}>Starring {show.cast.slice(0, 5).join(', ')}</Text> : null}
+              <WhereToWatch watch={show.watch} />
+              {show.tmdbId ? <TmdbCredit /> : null}
               {seasons.length > 1 ? (
                 <View style={styles.seasons}>
                   {seasons.map((s) => (
@@ -123,6 +131,7 @@ const styles = StyleSheet.create({
   sheetPhone: { position: 'absolute', left: 0, right: 0, bottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, height: '90%' },
   title: { ...type.h1, color: colors.text, fontSize: 34, paddingRight: 40 },
   meta: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 14 },
+  tagline: { color: colors.gold, fontFamily: fonts.bodySemi, fontSize: 15, fontStyle: 'italic', marginTop: -4 },
   imdb: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   imdbLogo: {
     backgroundColor: '#F5C518', color: '#000', fontFamily: fonts.displayHeavy, fontSize: 12, paddingHorizontal: 5,

@@ -124,7 +124,16 @@ export default function App() {
       <View style={{ flex: 1 }}>{screen}</View>
       {L.compact && <BottomTabs tab={tab} onTab={setTab} />}
       {detail && <MovieDetail movie={detail} onPlay={playMovie} onClose={() => setDetail(null)} />}
-      {showDetail && <ShowDetail show={showDetail} onPlay={playEpisode} onClose={() => setShowDetail(null)} />}
+      {showDetail && (
+        <ShowDetail
+          show={showDetail}
+          onPlay={playEpisode}
+          onTrailer={(url, title) =>
+            playMovie({ id: `trailer:${showDetail.id}`, title: `${title} · Trailer`, genres: ['Trailer'], description: '', poster: showDetail.poster, url, source: 'youtube', popularity: 0 }, true)
+          }
+          onClose={() => setShowDetail(null)}
+        />
+      )}
       {playing && <PlayerScreen item={playing} onChange={setPlaying} onClose={() => setPlaying(null)} />}
     </View>
   );

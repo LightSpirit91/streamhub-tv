@@ -21,7 +21,7 @@ export function ShowCard({ show, width, onPress }: { show: Show; width: number; 
   return (
     <Pressable onPress={() => onPress(show)} {...f.handlers} style={[{ width, marginRight: 16 }, f.on && { transform: [{ scale: 1.05 }], zIndex: 2 }]} accessibilityLabel={show.title}>
       <View style={[styles.art, { height: Math.round((width * 9) / 16) }, f.on && styles.artOn]}>
-        <Image source={{ uri: show.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={show.id} />
+        <Image source={{ uri: show.backdrop ?? show.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={show.id} />
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={StyleSheet.absoluteFill} />
         <Text style={styles.epCount}>{show.episodes.length} episodes</Text>
       </View>
@@ -88,7 +88,7 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 56 }}>
       <View style={[styles.hero, { marginHorizontal: L.gutter }]}>
-        <Image source={{ uri: hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={{ uri: hero.backdrop ?? hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" />
         <LinearGradient colors={['rgba(6,7,11,0.2)', 'rgba(6,7,11,0.95)']} style={StyleSheet.absoluteFill} />
         <View style={styles.heroBody}>
           <Text style={styles.overline}>{watching[0] ? 'CONTINUE WATCHING' : 'FEATURED SERIES'}</Text>
