@@ -7,23 +7,19 @@ import { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 
 const URLS = [
-  'https://i.mjh.nz/PlutoTV/us.m3u8',
-  'https://i.mjh.nz/PlutoTV/all.m3u8',
-  'https://i.mjh.nz/Roku/all.m3u8',
-  'https://i.mjh.nz/PlutoTV/us.xml.gz',
-  'https://i.mjh.nz/Roku/all.xml.gz',
-  'https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz',
-  'https://epgshare01.online/epgshare01/epg_ripper_CA2.xml.gz',
-  'https://epgshare01.online/epgshare01/epg_ripper_IL1.xml.gz',
-  'https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz',
+  'https://i.mjh.nz/',
+  'https://i.mjh.nz/PlutoTV/',
+  'https://i.mjh.nz/Roku/',
+  'https://i.mjh.nz/PlutoTV/us.m3u',
+  'https://i.mjh.nz/PlutoTV/playlist.m3u8',
+  'https://i.mjh.nz/Roku/playlist.m3u8',
+  'https://i.mjh.nz/Roku/all.m3u',
   'https://epg.pw/xmltv/epg_US.xml.gz',
-  'https://epg.pw/xmltv/epg_CA.xml.gz',
-  'https://epg.pw/xmltv/epg_IL.xml.gz',
   'https://epg.pw/xmltv/epg_RU.xml.gz',
-  'https://www.open-epg.com/files/unitedstates1.xml.gz',
-  'https://www.open-epg.com/files/canada1.xml.gz',
-  'https://www.open-epg.com/files/israel1.xml.gz',
-  'https://www.open-epg.com/files/russia1.xml.gz',
+  'https://epg.pw/xmltv/epg_CA.xml.gz',
+  'https://epg.pw/xmltv/epg_MX.xml.gz',
+  'https://epg.pw/xmltv/epg_GB.xml.gz',
+  'https://epg.pw/xmltv/epg_lite.xml.gz',
 ];
 
 const t = (s: string) => {
@@ -42,10 +38,12 @@ async function guide(url: string) {
   let s: NodeJS.ReadableStream = Readable.fromWeb(res.body as never);
   if (url.endsWith('.gz')) s = s.pipe(createGunzip());
   const now = Date.now() / 1000;
-  let channels = 0, programmes = 0, maxStop = 0, buf = '';
+  let channels = 0, programmes = 0, maxStop = 0, buf = '', channelsBeforeFirst = -1;
   const perChannelMax = new Map<string, number>();
   for await (const c of s as AsyncIterable<Buffer>) {
     buf += c.toString('utf8');
+    const pIdx = buf.indexOf('<programme');
+    if (channelsBeforeFirst < 0 && pIdx >= 0) channelsBeforeFirst = channels + (buf.slice(0, pIdx).match(/<channel /g) ?? []).length;
     channels += (buf.match(/<channel /g) ?? []).length;
     for (const m of buf.matchAll(/<programme[^>]*start="([^"]+)"[^>]*stop="([^"]+)"[^>]*channel="([^"]+)"|<programme[^>]*channel="([^"]+)"[^>]*start="([^"]+)"[^>]*stop="([^"]+)"/g)) {
       const stop = t(m[2] ?? m[6]);
@@ -60,7 +58,7 @@ async function guide(url: string) {
   clearTimeout(timer);
   const reach = [...perChannelMax.values()].map((x) => (x - now) / 86400);
   const n = (d: number) => reach.filter((r) => r >= d).length;
-  console.log(`channels ${channels} · programmes ${programmes} · furthest ${((maxStop - now) / 86400).toFixed(1)} days`);
+  console.log(`channels ${channels} (before first programme: ${channelsBeforeFirst}) · programmes ${programmes} · furthest ${((maxStop - now) / 86400).toFixed(1)} days`);
   console.log(`channels reaching: 1d ${n(1)} · 2d ${n(2)} · 3d ${n(3)} · 5d ${n(5)} · 7d ${n(7)} (of ${perChannelMax.size})`);
 }
 
@@ -73,7 +71,7 @@ async function main() {
         const res = await fetch(url, { headers: { 'User-Agent': 'StreamHub/1.0' } });
         const text = await res.text();
         console.log(`status ${res.status} · ${text.length} chars · ${(text.match(/#EXTINF/g) ?? []).length} entries`);
-        console.log(text.slice(0, 600));
+        console.log(text.slice(0, 1500).replace(/\s+/g, ' '));
       }
     } catch (e) {
       console.log(`FAILED ${(e as Error).message} ${(e as Error & { cause?: { code?: string } }).cause?.code ?? ''}`);
