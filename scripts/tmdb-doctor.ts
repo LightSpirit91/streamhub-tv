@@ -12,6 +12,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDetails, pickSearchHit, type TmdbMeta } from '../src/core/meta/tmdb';
+import { genresFromTmdb } from '../src/core/movies/youtube';
 import type { Movie, MovieCatalog } from '../src/core/movies/types';
 import type { Show, ShowCatalog } from '../src/core/shows/types';
 
@@ -72,15 +73,22 @@ async function lookup(item: Item, type: 'movie' | 'tv'): Promise<TmdbMeta> {
 
 function apply(item: Item, meta: TmdbMeta) {
   Object.assign(item, meta);
+  // TMDB's genres are curated; they replace genres guessed from descriptions.
+  const g = genresFromTmdb(meta.tmdbGenres);
+  if (g) (item as { genres: string[] }).genres = g;
   // TMDB's synopsis replaces empty or one-line archive descriptions.
   if (meta.overview && (!item.description || item.description.length < 80)) item.description = meta.overview;
   delete (item as TmdbMeta).overview;
 }
 
+const tidyTitleForSearch = (t: string) => t.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+
 async function enrich<T extends Item>(items: T[], type: 'movie' | 'tv'): Promise<{ looked: number; found: number }> {
   const now = Date.now();
   const todo = [
     ...items.filter((i) => !i.tmdbCheckedAt),
+    // Unmatched titles get another try weekly (titles get cleaned up over time).
+    ...items.filter((i) => !i.tmdbId && i.tmdbCheckedAt && now - i.tmdbCheckedAt > 7 * 86_400_000).slice(0, 1500),
     ...items
       .filter((i) => i.tmdbId && i.tmdbCheckedAt && now - i.tmdbCheckedAt > REFRESH_MS)
       .sort((a, b) => b.popularity - a.popularity)
@@ -92,7 +100,7 @@ async function enrich<T extends Item>(items: T[], type: 'movie' | 'tv'): Promise
     Array.from({ length: 6 }, async () => {
       while (i < todo.length) {
         const item = todo[i++];
-        const meta = await lookup(item, type);
+        const meta = await lookup({ ...item, title: item.source === 'youtube' ? tidyTitleForSearch(item.title) : item.title } as T, type);
         apply(item, meta);
         if (meta.tmdbId) found++;
       }

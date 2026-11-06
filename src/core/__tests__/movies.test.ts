@@ -121,3 +121,14 @@ describe('official channel films', () => {
     expect(isFilmTitle('Operation Thunderbolt')).toBe(true);
   });
 });
+
+describe('studio titles and genres', () => {
+  it('cleans decorated titles and maps TMDB genres', async () => {
+    const { tidyTitle, genresFromTmdb } = await import('../movies/youtube');
+    expect(tidyTitle('Девчата (FullHD, комедия, реж. Юрий Чулюкин, 1961 г.)')).toBe('Девчата');
+    expect(tidyTitle('The Shooter (Free ) Classic Western')).toBe('The Shooter');
+    expect(tidyTitle('Москва слезам не верит (1 серия)')).toBe('Москва слезам не верит (1 серия)');
+    expect(genresFromTmdb(['Thriller', 'Horror'])).toEqual(['Mystery & Thriller', 'Horror']);
+    expect(genresFromTmdb([])).toBeUndefined();
+  });
+});

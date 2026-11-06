@@ -11,6 +11,7 @@ import type { UpcomingMovie } from '../core/movies/upcoming';
 import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
+import { genresFromTmdb, isFilmTitle, tidyTitle } from '../core/movies/youtube';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -89,7 +90,13 @@ const DAY = 86_400_000;
 
 /** Second line of defense: the same content filter the nightly job uses. */
 const clean = (list: Movie[]) =>
-  list.filter((m) => isWatchable({ title: m.title, description: m.description })).map((m) => ({ ...m, title: stripEmoji(m.title) }));
+  list
+    .filter((m) => isWatchable({ title: m.title, description: m.description }) && (m.source !== 'youtube' || isFilmTitle(m.title)))
+    .map((m) => ({
+      ...m,
+      title: m.source === 'youtube' ? tidyTitle(stripEmoji(m.title)) : stripEmoji(m.title),
+      genres: genresFromTmdb(m.tmdbGenres) ?? m.genres,
+    }));
 
 async function loadMovies(force: boolean): Promise<Movie[]> {
   return clean(await loadMoviesRaw(force));

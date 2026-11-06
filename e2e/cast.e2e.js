@@ -62,6 +62,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8776/streamhub-tv/';
     if (!/video\/mp4 \| BUFFERED/.test(l) && !ytHint) throw new Error(l);
   });
   await step('Movie seek controls the TV', async () => {
+    if (await p.locator('text=This title is from YouTube').count()) return; // YouTube plays locally; seek is local
     await p.keyboard.press('ArrowRight'); await p.waitForTimeout(400);
     if (!(await log()).some((x) => x.startsWith('seek'))) throw new Error('no seek');
   });
