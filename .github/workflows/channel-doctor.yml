@@ -28,6 +28,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx vitest run
       - run: npx tsx scripts/channel-doctor.ts --check --out dist
+      - run: npx tsx scripts/movie-doctor.ts --limit 600 --out dist
+        continue-on-error: true
       - name: Publish to catalog branch
         run: |
           cd dist
@@ -35,6 +37,7 @@ jobs:
           git config user.name "channel-doctor"
           git config user.email "channel-doctor@users.noreply.github.com"
           git add catalog.json report.md channels.md channels.csv
+          [ -f movies.json ] && git add movies.json
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary

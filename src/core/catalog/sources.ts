@@ -16,6 +16,8 @@ const IPTV_ORG_RAW = 'https://raw.githubusercontent.com/iptv-org/iptv/master/str
 
 export const STREAMHUB_CATALOG_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/catalog.json';
+export const STREAMHUB_MOVIES_URL =
+  'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/movies.json';
 export const STREAMHUB_EPG_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg.json';
 
