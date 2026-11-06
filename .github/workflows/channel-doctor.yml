@@ -18,7 +18,7 @@ concurrency:
 jobs:
   doctor:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,7 +28,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx vitest run
       - run: npx tsx scripts/channel-doctor.ts --check --out dist
-      - run: npx tsx scripts/movie-doctor.ts --limit 900 --out dist
+      - run: npx tsx scripts/movie-doctor.ts --limit 5000 --out dist
         continue-on-error: true
       - name: Publish to catalog branch
         run: |

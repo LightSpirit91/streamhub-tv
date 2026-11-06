@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classicBoost, cleanText, cleanTitle, titleKey, genresFrom, isWatchable, pickVideoFile, searchUrl, toMovie } from '../movies/archive';
+import { classicBoost, cleanText, cleanTitle, languageOf, runtimeMinutes, titleKey, genresFrom, isWatchable, pickVideoFile, searchUrl, toMovie } from '../movies/archive';
 
 describe('archive movies', () => {
   const files = [
@@ -54,6 +54,18 @@ describe('archive movies', () => {
   it('floats well-known classics to the top', () => {
     expect(classicBoost('His Girl Friday')).toBeGreaterThan(1);
     expect(classicBoost('Some Unknown Film')).toBe(1);
+  });
+
+  it('reads language and runtime, drops shorts', () => {
+    expect(languageOf('rus')).toBe('Russian');
+    expect(languageOf(['English', 'Spanish'])).toBe('Spanish');
+    expect(languageOf('eng')).toBe('English');
+    expect(runtimeMinutes('1:25:33')).toBe(85);
+    expect(runtimeMinutes('72 min')).toBe(72);
+    expect(toMovie({ identifier: 'x', title: 'A Short', runtime: '8 min' }, files)).toBeNull();
+    const m = toMovie({ identifier: 'p', title: 'Battleship Potemkin', year: '1925', language: 'Russian', runtime: '1:15:00' }, files)!;
+    expect(m.language).toBe('Russian');
+    expect(m.genres).toContain('Silent Era');
   });
 
   it('queries the feature film collections', () => {

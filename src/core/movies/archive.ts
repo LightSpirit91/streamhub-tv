@@ -5,11 +5,14 @@ import type { Movie } from './types';
  * full-length films that are public domain or freely licensed. Legal, free,
  * no account, playable as plain MP4 on every device.
  */
-export const ARCHIVE_COLLECTIONS = ['feature_films', 'Film_Noir', 'SciFi_Horror'];
+export const ARCHIVE_COLLECTIONS = [
+  'feature_films', 'Film_Noir', 'SciFi_Horror', 'silent_films', 'classic_cartoons', 'Comedy_Films',
+  'Western_Films', 'Horror_Films', 'Mystery_Films', 'Musical_Films', 'War_Films', 'documentaryandshortfilms',
+];
 
 export function searchUrl(rows: number, page = 1): string {
   const q = `collection:(${ARCHIVE_COLLECTIONS.join(' OR ')}) AND mediatype:movies`;
-  const fl = ['identifier', 'title', 'year', 'downloads', 'subject', 'description', 'runtime'];
+  const fl = ['identifier', 'title', 'year', 'downloads', 'subject', 'description', 'runtime', 'language', 'collection'];
   const params = [
     `q=${encodeURIComponent(q)}`,
     ...fl.map((f) => `fl[]=${f}`),
@@ -137,8 +140,42 @@ export function titleKey(title: string): string {
   return cleanTitle(title).toLowerCase().replace(/^the /, '').replace(/[^a-z0-9]/g, '');
 }
 
+/** Archive language field ("Russian", "rus", "spa;eng") -> one display language. */
+const LANG: [RegExp, string][] = [
+  [/^(rus|russian|русский)/i, 'Russian'],
+  [/^(spa|spanish|español|espanol)/i, 'Spanish'],
+  [/^(heb|hebrew)/i, 'Hebrew'],
+  [/^(yid|yiddish)/i, 'Yiddish'],
+  [/^(fre|fra|french)/i, 'French'],
+  [/^(ger|deu|german)/i, 'German'],
+  [/^(ita|italian)/i, 'Italian'],
+  [/^(jpn|japanese)/i, 'Japanese'],
+  [/^(por|portuguese)/i, 'Portuguese'],
+  [/^(ukr|ukrainian)/i, 'Ukrainian'],
+  [/^(eng|english)/i, 'English'],
+];
+
+export function languageOf(raw: unknown): string | undefined {
+  const parts = (Array.isArray(raw) ? raw : String(raw ?? '').split(/[;,/]/)).map((x) => String(x).trim()).filter(Boolean);
+  for (const p of parts) for (const [re, name] of LANG) if (re.test(p) && name !== 'English') return name;
+  return parts.some((p) => /^(eng|english)/i.test(p)) ? 'English' : undefined;
+}
+
+/** "1:25:33", "85 min", "01:12:00" -> minutes. */
+export function runtimeMinutes(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const hms = /^(\d+):(\d{1,2})(?::(\d{1,2}))?$/.exec(raw.trim());
+  if (hms) return hms[3] !== undefined ? +hms[1] * 60 + +hms[2] : +hms[1];
+  const min = /(\d+)\s*(min|m\b)/i.exec(raw);
+  if (min) return +min[1];
+  const h = /(\d+)\s*h/i.exec(raw);
+  return h ? +h[1] * 60 : undefined;
+}
+
 export interface SearchDoc {
   identifier: string;
+  language?: string | string[];
+  collection?: string | string[];
   title?: string;
   year?: string | number;
   downloads?: number;
@@ -150,12 +187,20 @@ export interface SearchDoc {
 export function toMovie(doc: SearchDoc, files: ArchiveFile[]): Movie | null {
   const file = pickVideoFile(files);
   if (!file || !doc.title || !isWatchable(doc)) return null;
+  const mins = runtimeMinutes(doc.runtime);
+  if (mins !== undefined && mins < 40) return null; // shorts, trailers, single cartoons
   const year = Number(String(doc.year ?? '').slice(0, 4)) || undefined;
+  const collections = Array.isArray(doc.collection) ? doc.collection : [doc.collection ?? ''];
+  const genres = genresFrom(doc.subject, doc.title);
+  if (collections.some((c) => /silent/i.test(String(c))) || (year && year < 1929)) genres.push('Silent Era');
+  if (collections.some((c) => /noir/i.test(String(c))) && !genres.includes('Crime & Noir')) genres.unshift('Crime & Noir');
   return {
     id: doc.identifier,
     title: cleanTitle(doc.title),
     year,
-    genres: genresFrom(doc.subject, doc.title),
+    genres: [...new Set(genres)],
+    language: languageOf(doc.language),
+    minutes: mins,
     description: cleanText(doc.description),
     poster: posterUrl(doc.identifier),
     url: fileUrl(doc.identifier, file.name),

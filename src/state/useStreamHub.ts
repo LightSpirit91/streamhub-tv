@@ -7,6 +7,7 @@ import { applyHealth } from '../core/catalog/buildCatalog';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
 import { STREAMHUB_MOVIES_URL } from '../core/catalog/sources';
+import { isWatchable } from '../core/movies/archive';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -75,7 +76,14 @@ function prepare(channels: Channel[], health: Record<string, StreamHealth>) {
 const MOVIES_KEY = 'movies.v1.json';
 const DAY = 86_400_000;
 
+/** Second line of defense: the same content filter the nightly job uses. */
+const clean = (list: Movie[]) => list.filter((m) => isWatchable({ title: m.title, description: m.description }));
+
 async function loadMovies(force: boolean): Promise<Movie[]> {
+  return clean(await loadMoviesRaw(force));
+}
+
+async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
   try {
     if (!force) {
       const raw = await fileBlobStore.read(MOVIES_KEY);

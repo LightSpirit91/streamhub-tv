@@ -10,7 +10,7 @@ import type { Movie, MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
-const LIMIT = Number(arg('--limit', '900'));
+const LIMIT = Number(arg('--limit', '5000'));
 const OUT = arg('--out', 'dist');
 const UA = { 'User-Agent': 'StreamHub-MovieDoctor/1.0 (+https://github.com/LightSpirit91/streamhub-tv)' };
 
@@ -33,7 +33,7 @@ async function json<T>(url: string): Promise<T> {
 async function main() {
   const docs: SearchDoc[] = [];
   for (let page = 1; docs.length < LIMIT; page++) {
-    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(500, LIMIT), page));
+    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(1000, LIMIT), page));
     if (!r.response.docs.length) break;
     docs.push(...r.response.docs);
   }
@@ -44,7 +44,7 @@ async function main() {
   const movies: Movie[] = [];
   let i = 0;
   await Promise.all(
-    Array.from({ length: 12 }, async () => {
+    Array.from({ length: 24 }, async () => {
       while (i < Math.min(docs.length, LIMIT)) {
         const d = docs[i++];
         try {
@@ -71,7 +71,9 @@ async function main() {
   writeFileSync(join(OUT, 'movies.json'), JSON.stringify(catalog));
   const byGenre: Record<string, number> = {};
   for (const m of catalog.movies) for (const g of m.genres) byGenre[g] = (byGenre[g] ?? 0) + 1;
-  console.log(`movies: ${catalog.movies.length}`, byGenre);
+  const byLang: Record<string, number> = {};
+  for (const m of catalog.movies) if (m.language) byLang[m.language] = (byLang[m.language] ?? 0) + 1;
+  console.log(`movies: ${catalog.movies.length}`, byGenre, byLang);
 }
 
 main().catch((e) => {
