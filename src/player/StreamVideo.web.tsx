@@ -19,8 +19,16 @@ export default function StreamVideo(p: StreamVideoProps) {
     const fail = (why: string) => !dead && cb.current.onError(why);
     const onPlaying = () => !dead && cb.current.onPlaying();
     const onError = () => fail(v.error?.message || 'Media error');
+    const onTime = () => !dead && cb.current.onTime?.(v.currentTime, Number.isFinite(v.duration) ? v.duration : 0);
+    const onEnded = () => !dead && cb.current.onEnded?.();
+    const onMeta = () => {
+      if (cb.current.startAt) v.currentTime = cb.current.startAt;
+    };
     v.addEventListener('playing', onPlaying);
     v.addEventListener('error', onError);
+    v.addEventListener('timeupdate', onTime);
+    v.addEventListener('ended', onEnded);
+    v.addEventListener('loadedmetadata', onMeta, { once: true });
 
     const native = v.canPlayType('application/vnd.apple.mpegurl') !== '';
     if (p.stream.format !== 'hls' || native) {
@@ -48,11 +56,17 @@ export default function StreamVideo(p: StreamVideoProps) {
       dead = true;
       v.removeEventListener('playing', onPlaying);
       v.removeEventListener('error', onError);
+      v.removeEventListener('timeupdate', onTime);
+      v.removeEventListener('ended', onEnded);
       hls?.destroy();
       v.removeAttribute('src');
       v.load();
     };
   }, [p.stream.url, p.attempt, p.stream.format]);
+
+  useEffect(() => {
+    if (ref.current && p.seek) ref.current.currentTime = Math.max(0, p.seek.to);
+  }, [p.seek?.n]);
 
   useEffect(() => {
     if (ref.current) ref.current.muted = p.muted;

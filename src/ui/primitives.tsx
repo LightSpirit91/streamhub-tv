@@ -20,12 +20,14 @@ export function useFocusRing() {
 
 export function Flag({ country, size = 14 }: { country?: string; size?: number }) {
   const uri = flagUri(country);
-  if (!uri) return <Globe size={size} color={colors.textDim} strokeWidth={2} />;
+  const [failed, setFailed] = useState(false);
+  if (!uri || failed) return <Globe size={size} color={colors.textDim} strokeWidth={2} />;
   return (
     <Image
       source={{ uri }}
       style={{ width: Math.round(size * 1.4), height: size, borderRadius: 2 }}
       contentFit="cover"
+      onError={() => setFailed(true)}
     />
   );
 }

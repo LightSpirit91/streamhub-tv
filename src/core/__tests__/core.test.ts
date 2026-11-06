@@ -155,6 +155,19 @@ describe('country fallback', () => {
   });
 });
 
+describe('FAST lineups', () => {
+  it('merges the same channel from several country lineups into one', () => {
+    const m3u = '#EXTINF:-1 tvg-id="",UFC (720p)\nhttps://jmp2.uk/plu-@@.m3u8\n';
+    const c = buildCatalog([
+      { source: { id: 'iptv-org:raw:us_pluto' }, entries: parseM3U(m3u.replace('@@', 'us')) },
+      { source: { id: 'iptv-org:raw:ca_pluto' }, entries: parseM3U(m3u.replace('@@', 'ca')) },
+    ]);
+    const ufc = c.channels.filter((x) => x.name === 'UFC');
+    expect(ufc).toHaveLength(1);
+    expect(ufc[0].streams).toHaveLength(2);
+  });
+});
+
 describe('language feeds', () => {
   it('routes Russian-language channels from other countries into Russian TV', () => {
     const c = buildCatalog([{

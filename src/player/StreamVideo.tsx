@@ -13,6 +13,7 @@ export default function StreamVideo(p: StreamVideoProps) {
   const player = useVideoPlayer(null, (pl) => {
     pl.staysActiveInBackground = true;
     pl.showNowPlayingNotification = true;
+    pl.timeUpdateEventInterval = 1;
   });
 
   const cb = useRef(p);
@@ -25,7 +26,9 @@ export default function StreamVideo(p: StreamVideoProps) {
     player
       .replaceAsync({ uri: p.stream.url, headers: p.stream.headers, contentType })
       .then(() => {
-        if (!cancelled) player.play();
+        if (cancelled) return;
+        if (cb.current.startAt) player.currentTime = cb.current.startAt;
+        player.play();
       })
       .catch((e: Error) => !cancelled && cb.current.onError(e.message));
     return () => {
@@ -46,6 +49,15 @@ export default function StreamVideo(p: StreamVideoProps) {
   useEffect(() => {
     if (p.pipRequest) view.current?.startPictureInPicture().catch(() => {});
   }, [p.pipRequest]);
+
+  useEffect(() => {
+    if (p.seek) player.currentTime = Math.max(0, p.seek.to);
+  }, [player, p.seek?.n]);
+
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    cb.current.onTime?.(currentTime, player.duration || 0);
+  });
+  useEventListener(player, 'playToEnd', () => cb.current.onEnded?.());
 
   useEventListener(player, 'statusChange', ({ status, error }) => {
     if (status === 'error') cb.current.onError(error?.message ?? 'Playback error');

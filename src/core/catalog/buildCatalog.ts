@@ -4,6 +4,7 @@ import { classify, popularity, spotlightScore } from './hubs';
 import { BLOCKED_CATEGORIES, type PlaylistSource } from './sources';
 
 export const CATALOG_VERSION = 1;
+const FAST_SOURCE = /_(pluto|samsung|roku|plex|tubi|xumo|stirr|stingray|firetv|vizio|tcl|distro|amagi)$/;
 const SPOTLIGHT_SIZE = 24;
 
 export interface SourceBatch {
@@ -39,7 +40,11 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
       const stream = toStream(e, info, source.id);
       if (!stream) continue;
 
-      const key = channelKey(e, info.clean, country);
+      // The same free (FAST) channel ships in Pluto/Samsung/Roku lineups for
+      // several countries without a tvg-id. Merge them into one channel whose
+      // streams fail over across regions.
+      const fast = !e.tvgId && FAST_SOURCE.test(source.id);
+      const key = fast ? channelKey(e, info.clean, 'fast') : channelKey(e, info.clean, country);
       let ch = map.get(key);
       if (!ch) {
         ch = {

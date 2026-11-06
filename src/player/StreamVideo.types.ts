@@ -13,6 +13,13 @@ export interface StreamVideoProps {
   fit: Fit;
   /** Bump to request Picture-in-Picture. */
   pipRequest: number;
+  /** VOD: jump here (seconds). `n` changes on every request. */
+  seek?: { to: number; n: number };
+  /** VOD: start position in seconds. */
+  startAt?: number;
+  /** Fires about once per second with position and duration (seconds). */
+  onTime?(current: number, duration: number): void;
+  onEnded?(): void;
   onPlaying(): void;
   onError(reason: string): void;
   /** Autoplay with sound was blocked (browsers); playing muted instead. */
