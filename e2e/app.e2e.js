@@ -41,7 +41,7 @@ async function run(b, name, viewport) {
   await step('Shows page + episodes sheet + play + back', async () => {
     await tab('Shows'); await p.waitForTimeout(1500);
     await p.getByText('Episodes', { exact: true }).first().click(); await p.waitForTimeout(600);
-    await p.getByRole('button', { name: /^(Play|Resume)/ }).first().click(); await p.waitForTimeout(1200);
+    await p.getByRole('button', { name: /^(Play episode|Resume episode)/ }).first().click(); await p.waitForTimeout(1200);
     await p.click('[aria-label="Back"]'); await p.waitForTimeout(400);
   });
   await step('My List shows the saved channel', async () => { await tab('My List'); await p.waitForSelector('text=Favorite Channels', { timeout: 5000 }); });

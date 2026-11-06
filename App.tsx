@@ -15,6 +15,8 @@ import { MyListScreen } from './src/screens/MyListScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { ShowsScreen } from './src/screens/ShowsScreen';
 import { ShowDetail } from './src/screens/ShowDetail';
+import { UpcomingDetail } from './src/components/Upcoming';
+import type { UpcomingMovie } from './src/core/movies/upcoming';
 import type { Show } from './src/core/shows/types';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PlayerScreen, type PlayItem } from './src/player/PlayerScreen';
@@ -24,6 +26,8 @@ import { colors, fonts } from './src/ui/theme';
 import { useLayout } from './src/ui/layout';
 import { initCast, useCast } from './src/player/cast/useCast';
 import { NowOnTvBar } from './src/components/CastControls';
+import { APP_VERSION } from './src/version';
+import { ReminderBanner } from './src/components/ReminderBanner';
 
 export default function App() {
   const [fontsReady] = useFonts({
@@ -40,6 +44,7 @@ export default function App() {
   const [playing, setPlaying] = useState<PlayItem | null>(null);
   const [detail, setDetail] = useState<Movie | null>(null);
   const [showDetail, setShowDetail] = useState<Show | null>(null);
+  const [upcomingDetail, setUpcomingDetail] = useState<UpcomingMovie | null>(null);
   // Chromecast: remember what's on the TV so the bar can reopen its remote.
   const castDevice = useCast().device;
   const [castItem, setCastItem] = useState<PlayItem | null>(null);
@@ -105,7 +110,7 @@ export default function App() {
       case 'live':
         return <LiveTVScreen initialHub={liveHub} onFullscreen={playChannel} />;
       case 'movies':
-        return <MoviesScreen onOpen={setDetail} onPlay={playMovie} />;
+        return <MoviesScreen onOpen={setDetail} onPlay={playMovie} onUpcoming={setUpcomingDetail} />;
       case 'shows':
         return <ShowsScreen onOpen={setShowDetail} onPlay={playEpisode} />;
       case 'mylist':
@@ -122,6 +127,7 @@ export default function App() {
               setTab('live');
             }}
             onMovies={() => setTab('movies')}
+            onShow={setShowDetail}
           />
         );
     }
@@ -133,8 +139,24 @@ export default function App() {
       <TopBar tab={tab} onTab={(t) => { setTab(t); if (t !== 'live') setLiveHub(null); }} compact={L.compact} gutter={L.gutter} />
       <View style={{ flex: 1 }}>{screen}</View>
       {!playing && castItem ? <NowOnTvBar onOpen={() => setPlaying(castItem)} /> : null}
+      {!playing ? <ReminderBanner onWatch={(c) => playChannel(c, [c])} /> : null}
+      {tab === 'home' && !playing ? (
+        <Text style={[styles.version, { bottom: L.compact ? 86 : 10, right: L.compact ? 12 : 18 }]} pointerEvents="none" accessibilityLabel={`Version ${APP_VERSION}`}>
+          v{APP_VERSION}
+        </Text>
+      ) : null}
       {L.compact && <BottomTabs tab={tab} onTab={setTab} />}
       {detail && <MovieDetail movie={detail} onPlay={playMovie} onClose={() => setDetail(null)} />}
+      {upcomingDetail && (
+        <UpcomingDetail
+          movie={upcomingDetail}
+          onTrailer={(url, title) => {
+            setUpcomingDetail(null);
+            playMovie({ id: `trailer:${upcomingDetail.id}`, title: `${title} · Trailer`, genres: ['Trailer'], description: '', poster: upcomingDetail.posterHi ?? '', url, source: 'youtube', popularity: 0 }, true);
+          }}
+          onClose={() => setUpcomingDetail(null)}
+        />
+      )}
       {showDetail && (
         <ShowDetail
           show={showDetail}
@@ -154,4 +176,5 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   dim: { color: colors.textDim, fontFamily: fonts.body, fontSize: 14 },
+  version: { position: 'absolute', color: colors.textFaint, fontFamily: fonts.bodySemi, fontSize: 11, opacity: 0.8 },
 });

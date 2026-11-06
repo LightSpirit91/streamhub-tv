@@ -47,7 +47,7 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, L.compact ? styles.sheetPhone : { width: Math.min(960, L.width - 80) }]}>
         <Image source={{ uri: movie.backdrop ?? movie.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={movie.backdrop ? 0 : 50} />
-        <LinearGradient colors={movie.backdrop ? ['rgba(6,7,11,0.25)', 'rgba(6,7,11,0.92)', 'rgba(6,7,11,0.99)'] : ['rgba(6,7,11,0.55)', 'rgba(6,7,11,0.97)']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={movie.backdrop ? ['rgba(28,23,25,0.25)', 'rgba(28,23,25,0.92)', 'rgba(28,23,25,0.99)'] : ['rgba(28,23,25,0.55)', 'rgba(28,23,25,0.97)']} style={StyleSheet.absoluteFill} />
         <ScrollView contentContainerStyle={[styles.inner, L.compact && { flexDirection: 'column' }]}>
           <Image source={{ uri: movie.posterHi ?? movie.poster }} style={[styles.poster, L.compact && { width: 150, height: 222 }]} contentFit="cover" />
           <View style={{ flex: 1, gap: 12 }}>

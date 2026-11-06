@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import type { Movie, MovieCatalog } from '../src/core/movies/types';
 import type { Show, ShowCatalog } from '../src/core/shows/types';
 import { genresFrom, isWatchable, cleanText, stripEmoji } from '../src/core/movies/archive';
+import { isFilmTitle } from '../src/core/movies/youtube';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -111,6 +112,8 @@ const tooOld = (src: Source, text: string) => {
   return !!(src.minYear && y && y < src.minYear);
 };
 
+const titleKeyOf = (t: string) => stripEmoji(t).toLowerCase().replace(/[^a-z0-9\u0590-\u05ff\u0400-\u04ff]+/g, '');
+
 const thumb = (s: Snip) => s.thumbnails?.maxres?.url ?? s.thumbnails?.standard?.url ?? s.thumbnails?.high?.url ?? s.thumbnails?.medium?.url ?? '';
 const embed = (id: string) => `https://www.youtube-nocookie.com/embed/${id}`;
 const tidy = (t: string) => stripEmoji(t).replace(/\s*[|│].*$/, '').replace(/\b(full movie|фильм целиком|полный фильм|סרט מלא|película completa|hd|4k)\b/gi, '').replace(/[\s\-–:()]+$/, '').trim();
@@ -154,7 +157,7 @@ async function main() {
           const show: Show = {
             id, title: tidy(pl.snippet.title), poster: thumb(pl.snippet), description: cleanText(pl.snippet.description),
             genres: genresFrom(pl.snippet.description, pl.snippet.title), language: src.language, country: src.country,
-            source: 'youtube', popularity: vids.reduce((n, v) => n + v.views, 0), addedAt: knownShows.get(id)?.addedAt ?? now,
+            source: 'youtube', popularity: Math.round(vids.reduce((n, v) => n + v.views, 0) / 40), addedAt: knownShows.get(id)?.addedAt ?? now,
             episodes: vids.map((v, i) => ({ id: v.id, title: tidy(v.snippet.title), url: embed(v.id), episode: i + 1, minutes: v.minutes })),
           };
           if (!isWatchable({ title: show.title, description: show.description })) continue;
@@ -170,6 +173,7 @@ async function main() {
           for (const v of await videos(await listPlaylist(uploads, 1500))) {
             if (!v.embeddable || v.minutes < 55) continue;
             if (tooOld(src, `${v.snippet.title} ${v.snippet.description.slice(0, 300)}`)) continue;
+            if (!isFilmTitle(v.snippet.title)) continue;
             const id = `yt:${v.id}`;
             const title = tidy(v.snippet.title);
             if (!title || !isWatchable({ title, description: v.snippet.description })) continue;
@@ -177,7 +181,7 @@ async function main() {
             const m: Movie = {
               id, title, year, genres: genresFrom(v.snippet.description, title), description: cleanText(v.snippet.description),
               poster: thumb(v.snippet), url: embed(v.id), minutes: v.minutes, language: src.language === 'English' ? undefined : src.language,
-              country: src.country, quality: 'HD', source: 'youtube', popularity: v.views,
+              country: src.country, quality: 'HD', source: 'youtube', popularity: Math.round(v.views / 40),
               addedAt: knownMovies.get(id)?.addedAt ?? now,
             };
             if (!knownMovies.has(id)) nm++;
@@ -192,8 +196,29 @@ async function main() {
     }
   }
 
-  movies.movies = [...knownMovies.values()].sort((a, b) => b.popularity - a.popularity);
-  shows.shows = [...knownShows.values()].sort((a, b) => b.popularity - a.popularity);
+  // Re-check everything imported before with today's rules, and merge duplicates:
+  // films by title (keep the most watched upload), series by title (merge episodes).
+  const films = new Map<string, Movie>();
+  for (const m of [...knownMovies.values()].sort((a, b) => b.popularity - a.popularity)) {
+    if (m.source === 'youtube' && !isFilmTitle(m.title)) continue;
+    const key = m.source === 'youtube' ? `yt:${titleKeyOf(m.title)}` : m.id;
+    if (!films.has(key)) films.set(key, { ...m, title: stripEmoji(m.title) });
+  }
+  const series = new Map<string, Show>();
+  for (const sh of [...knownShows.values()].sort((a, b) => b.popularity - a.popularity)) {
+    const key = sh.source === 'youtube' ? `yt:${sh.language}:${titleKeyOf(sh.title)}` : sh.id;
+    const cur = series.get(key);
+    if (!cur) {
+      series.set(key, { ...sh, title: stripEmoji(sh.title), episodes: sh.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) });
+    } else {
+      const have = new Set(cur.episodes.map((e) => e.id));
+      const extra = sh.episodes.filter((e) => !have.has(e.id)).map((e, i) => ({ ...e, title: stripEmoji(e.title), episode: cur.episodes.length + i + 1 }));
+      cur.episodes.push(...extra);
+      cur.popularity += sh.popularity;
+    }
+  }
+  movies.movies = [...films.values()].sort((a, b) => b.popularity - a.popularity);
+  shows.shows = [...series.values()].sort((a, b) => b.popularity - a.popularity);
   mkdirSync(OUT, { recursive: true });
   writeFileSync(moviesFile, JSON.stringify(movies));
   writeFileSync(showsFile, JSON.stringify(shows));

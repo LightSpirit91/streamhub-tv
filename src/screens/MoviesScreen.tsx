@@ -11,10 +11,37 @@ import { Row } from '../components/Row';
 import { Button, useFocusRing } from '../ui/primitives';
 import { colors, fonts, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
+import type { UpcomingMovie } from '../core/movies/upcoming';
+import { UpcomingCard } from '../components/Upcoming';
+
+type Sort = 'popular' | 'newest' | 'oldest' | 'best' | 'worst' | 'added' | 'az';
+const SORTS: { id: Sort; label: string }[] = [
+  { id: 'popular', label: 'Most popular' },
+  { id: 'added', label: 'Recently added' },
+  { id: 'newest', label: 'Newest first' },
+  { id: 'oldest', label: 'Oldest first' },
+  { id: 'best', label: 'Best rated' },
+  { id: 'worst', label: 'Lowest rated' },
+  { id: 'az', label: 'A to Z' },
+];
+const ratingOf = (m: Movie) => m.imdbRating || m.tmdbRating || 0;
+function sortMovies(list: Movie[], sort: Sort, minRating: number): Movie[] {
+  const l = minRating ? list.filter((m) => ratingOf(m) >= minRating) : [...list];
+  switch (sort) {
+    case 'newest': return l.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+    case 'oldest': return l.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+    case 'best': return l.filter((m) => ratingOf(m) > 0).sort((a, b) => ratingOf(b) - ratingOf(a));
+    case 'worst': return l.filter((m) => ratingOf(m) > 0).sort((a, b) => ratingOf(a) - ratingOf(b));
+    case 'added': return l.sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
+    case 'az': return l.sort((a, b) => a.title.localeCompare(b.title));
+    default: return l.sort((a, b) => b.popularity - a.popularity);
+  }
+}
 
 interface Props {
   onOpen(m: Movie): void;
   onPlay(m: Movie): void;
+  onUpcoming(m: UpcomingMovie): void;
 }
 
 type Filter =
@@ -26,7 +53,10 @@ type Filter =
 
 const decadeOf = (m: Movie) => (m.year ? Math.floor(m.year / 10) * 10 : undefined);
 
-export function MoviesScreen({ onOpen, onPlay }: Props) {
+export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
+  const upcoming = useStreamHub((s) => s.upcoming);
+  const [sort, setSort] = useState<Sort>('popular');
+  const [minRating, setMinRating] = useState(0);
   const L = useLayout();
   const movies = useStreamHub((s) => s.movies);
   const movieList = useStreamHub((s) => s.movieList);
@@ -119,7 +149,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
 
   // Browse grid for a single genre / language / decade / everything.
   if (filter.kind !== 'home') {
-    const list =
+    const base =
       filter.kind === 'all'
         ? movies
         : filter.kind === 'genre'
@@ -127,6 +157,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
           : filter.kind === 'language'
             ? movies.filter((m) => m.language === filter.value)
             : movies.filter((m) => decadeOf(m) === filter.value);
+    const list = sortMovies(base, sort, minRating);
     const title =
       filter.kind === 'all' ? 'All Movies' : filter.kind === 'genre' ? filter.value : filter.kind === 'language' ? filter.title : `The ${filter.value}s`;
     const cols = Math.max(3, Math.floor((L.width - L.gutter * 2) / (L.posterWidth + 16)));
@@ -143,9 +174,23 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
           columnWrapperStyle={{ paddingHorizontal: L.gutter, marginBottom: 22 }}
           contentContainerStyle={{ paddingBottom: 56 }}
           ListHeaderComponent={
-            <Text style={[styles.gridTitle, { marginHorizontal: L.gutter }]}>
-              {title} <Text style={styles.gridCount}>{list.length}</Text>
-            </Text>
+            <View>
+              <Text style={[styles.gridTitle, { marginHorizontal: L.gutter }]}>
+                {title} <Text style={styles.gridCount}>{list.length}</Text>
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: L.gutter, gap: 8, paddingBottom: 8 }}>
+                <Text style={styles.sortLabel}>Sort</Text>
+                {SORTS.map((x) => (
+                  <Chip key={x.id} label={x.label} active={sort === x.id} onPress={() => setSort(x.id)} />
+                ))}
+              </ScrollView>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: L.gutter, gap: 8, paddingBottom: 16 }}>
+                <Text style={styles.sortLabel}>Rating</Text>
+                {[0, 6, 7, 8].map((r) => (
+                  <Chip key={r} label={r ? `${r}+ stars` : 'Any'} active={minRating === r} onPress={() => setMinRating(r)} />
+                ))}
+              </ScrollView>
+            </View>
           }
           renderItem={({ item }) => card(item)}
         />
@@ -161,7 +206,7 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
       {chipBar}
       <View style={[styles.hero, { marginHorizontal: L.gutter }]}>
         <Image source={{ uri: hero.backdrop ?? hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={hero.backdrop ? 0 : 40} transition={500} />
-        <LinearGradient colors={['rgba(6,7,11,0.3)', 'rgba(6,7,11,0.96)']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(28,23,25,0.3)', 'rgba(28,23,25,0.96)']} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroInner, L.compact && { flexDirection: 'column-reverse', alignItems: 'flex-start' }]}>
           <View style={{ flex: 1, gap: 12 }}>
             <Text style={styles.overline}>{resume ? 'CONTINUE WATCHING' : `#${heroIdx + (cont[0] ? 0 : 1)} MOST WATCHED`}</Text>
@@ -197,7 +242,16 @@ export function MoviesScreen({ onOpen, onPlay }: Props) {
         gutter={L.gutter}
         render={(m, i) => <TopTen movie={m} rank={i + 1} width={L.posterWidth} onPress={onOpen} />}
       />
-      <Row title="New on StreamHub" subtitle={fresh.length ? `${fresh.length} this week` : undefined} accent={colors.ok} data={fresh} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
+      <Row
+        title="Coming Soon"
+        subtitle={upcoming.length ? 'release dates in Canada' : undefined}
+        accent={colors.coral}
+        data={upcoming.slice(0, 30)}
+        keyOf={(m) => m.id}
+        gutter={L.gutter}
+        render={(m) => <UpcomingCard movie={m} width={L.posterWidth} onPress={onUpcoming} />}
+      />
+      <Row title="New on StreamHub" subtitle={fresh.length ? `${fresh.length} this week` : undefined} accent={colors.ok} data={fresh} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => { setSort('added'); setFilter({ kind: 'all' }); }} />
       <Row title="Highest Rated on IMDb" accent="#F5C518" data={topRated} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       {because && (
         <Row title={`Because you watched ${because.seed.title}`} data={because.list} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
@@ -275,6 +329,7 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.gold, borderColor: colors.gold },
   chipText: { color: colors.textDim, fontFamily: fonts.bodyBold, fontSize: 13 },
   gridTitle: { ...type.h1, color: colors.text, marginTop: 10, marginBottom: 18 },
+  sortLabel: { color: colors.textFaint, fontFamily: fonts.bodyBold, fontSize: 12, letterSpacing: 1, alignSelf: 'center', marginRight: 4 },
   gridCount: { color: colors.textFaint, fontFamily: fonts.bodySemi, fontSize: 16 },
   note: { color: colors.textFaint, fontFamily: fonts.body, fontSize: 13, marginTop: 18 },
   empty: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },

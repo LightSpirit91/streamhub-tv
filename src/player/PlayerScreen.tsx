@@ -102,7 +102,10 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   // Chromecast: while a TV is connected, nothing plays here and this screen
   // is the remote. Channel switches and next episodes follow to the TV.
   const cast = useCast();
-  const casting = !!cast.device;
+  // YouTube videos can't be sent with the Cast button (YouTube only allows its own
+  // apps to do that), so those keep playing here while a TV stays connected.
+  const castConnected = !!cast.device;
+  const casting = castConnected && stream?.format !== 'youtube';
   const [airplay, setAirplay] = useState(0);
   const sendToTv = useCallback(async () => {
     if (!stream || stream.format === 'youtube') return;
@@ -333,6 +336,13 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
         <StatusOverlay state={state} title={title} sources={streams.length} live={live} />
       ) : null}
 
+      {castConnected && !casting ? (
+        <View style={styles.ytHint} pointerEvents="none">
+          <Text style={styles.ytHintText}>
+            This title is from YouTube, so it plays here. To show it on {cast.device}, use Chrome's menu, then Cast, then Cast tab.
+          </Text>
+        </View>
+      ) : null}
       {(chrome || casting || state.kind !== 'playing') && (
         <>
           <View style={styles.top}>
@@ -564,7 +574,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.lineHi,
   },
   unmuteText: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 15 },
-  casting: { ...fill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,7,11,0.92)', gap: 10, paddingHorizontal: 32 },
+  ytHint: {
+    position: 'absolute', top: 110, alignSelf: 'center', maxWidth: 560, paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 14, backgroundColor: 'rgba(28,23,25,0.86)', borderWidth: 1, borderColor: colors.lineHi,
+  },
+  ytHintText: { color: colors.text, fontFamily: fonts.bodySemi, fontSize: 13.5, textAlign: 'center' },
+  casting: { ...fill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(28,23,25,0.92)', gap: 10, paddingHorizontal: 32 },
   castHead: { ...type.h2, color: colors.text, fontSize: 26, textAlign: 'center' },
   castStop: {
     marginTop: 14, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24, borderWidth: 1.5, borderColor: colors.lineHi,

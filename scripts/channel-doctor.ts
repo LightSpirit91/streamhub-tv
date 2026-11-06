@@ -109,6 +109,19 @@ async function main() {
   for (const s of SOURCES) if (!s.lazy && !catalog.sources.includes(s.id)) failed.push(s.id);
 
   const enriched = await enrich(catalog.channels);
+  // "Just Added": channels we have never listed before get today's date;
+  // known channels keep the date they first appeared.
+  const prevCat = readJson<Catalog>(`${PREV}/catalog.json`);
+  if (prevCat?.channels.length) {
+    const firstSeen = new Map(prevCat.channels.map((c) => [c.id, c.addedAt ?? 0]));
+    const grave = readJson<Graveyard>(`${PREV}/graveyard.json`)?.entries ?? {};
+    for (const c of catalog.channels) {
+      if (firstSeen.has(c.id)) {
+        const t = firstSeen.get(c.id);
+        if (t) c.addedAt = t;
+      } else if (!grave[c.id]) c.addedAt = Date.now(); // revived channels are not "new"
+    }
+  }
   for (const c of catalog.channels) finalizeChannel(c);
   assignSpotlight(catalog.channels);
   catalog.channels.sort(byRank);

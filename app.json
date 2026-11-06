@@ -3,15 +3,15 @@
     "name": "StreamHub",
     "slug": "streamhub-tv",
     "scheme": "streamhub",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#07070A",
+    "backgroundColor": "#1C1719",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#07070A"
+      "backgroundColor": "#1C1719"
     },
     "ios": {
       "supportsTablet": true,
@@ -28,7 +28,7 @@
     "android": {
       "package": "com.lightspirit91.streamhub",
       "adaptiveIcon": {
-        "backgroundColor": "#07070A",
+        "backgroundColor": "#1C1719",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -40,8 +40,8 @@
       "bundler": "metro",
       "output": "single",
       "name": "StreamHub",
-      "themeColor": "#07070A",
-      "backgroundColor": "#07070A"
+      "themeColor": "#1C1719",
+      "backgroundColor": "#1C1719"
     },
     "plugins": [
       [

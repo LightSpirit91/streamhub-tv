@@ -1,7 +1,9 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Clapperboard, Film, Heart, Home, Library, Search, Tv } from 'lucide-react-native';
-import { PROFILES, useStreamHub } from '../state/useStreamHub';
+import { useStreamHub } from '../state/useStreamHub';
+import { useProfiles } from '../state/profiles';
+import { Avatar } from './Avatar';
 import { colors, fonts } from '../ui/theme';
 import { useFocusRing } from '../ui/primitives';
 import { Wordmark } from './Wordmark';
@@ -56,14 +58,12 @@ function TopTab({ label, Icon, active, onPress }: { label: string; Icon: typeof 
 function ProfileChip() {
   const profile = useStreamHub((s) => s.profile);
   const signOut = useStreamHub((s) => s.signOut);
-  const p = PROFILES.find((x) => x.id === profile);
+  const p = useProfiles((s) => s.profiles).find((x) => x.id === profile);
   const f = useFocusRing();
   if (!p) return null;
   return (
     <Pressable onPress={signOut} {...f.handlers} style={[styles.chip, f.on && styles.tabFocus]} accessibilityLabel="Switch profile">
-      <LinearGradient colors={p.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-        {p.id === 'mylove' ? <Heart size={13} color="#fff" fill="#fff" /> : <Text style={styles.avatarText}>{p.name[0]}</Text>}
-      </LinearGradient>
+      <Avatar profile={p} size={30} />
       <Text style={styles.chipText}>{p.name}</Text>
     </Pressable>
   );

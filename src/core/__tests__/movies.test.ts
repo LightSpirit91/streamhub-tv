@@ -108,3 +108,16 @@ describe('titles', () => {
     expect(stripEmoji('🏠 לבד בבית 5')).toBe('לבד בבית 5');
   });
 });
+
+describe('official channel films', () => {
+  it('treats season and episode uploads as not films, keeps real films', async () => {
+    const { isFilmTitle } = await import('../movies/youtube');
+    expect(isFilmTitle('זמן אמת עונה 10')).toBe(false);
+    expect(isFilmTitle('אויבים עונה 5')).toBe(false);
+    expect(isFilmTitle('Ирония судьбы, 2 серия')).toBe(false);
+    expect(isFilmTitle('Season 2 Episode 4')).toBe(false);
+    expect(isFilmTitle('גבעת חלפון אינה עונה')).toBe(true);
+    expect(isFilmTitle('Москва слезам не верит')).toBe(true);
+    expect(isFilmTitle('Operation Thunderbolt')).toBe(true);
+  });
+});

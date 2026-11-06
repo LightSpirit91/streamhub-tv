@@ -101,6 +101,33 @@ async function enrich<T extends Item>(items: T[], type: 'movie' | 'tv'): Promise
   return { looked: todo.length, found };
 }
 
+/** Coming soon in Canada: release date, artwork, trailer. Not playable here; shown so you know what's coming. */
+async function upcoming() {
+  const genres = new Map((await tmdb<{ genres: { id: number; name: string }[] }>('/genre/movie/list', { language: 'en-US' }))?.genres.map((g) => [g.id, g.name]) ?? []);
+  const today = new Date().toISOString().slice(0, 10);
+  const seen = new Set<number>();
+  const out: unknown[] = [];
+  for (let page = 1; page <= 4; page++) {
+    const r = await tmdb<{ results: { id: number; title: string; release_date?: string; poster_path?: string; backdrop_path?: string; overview?: string; genre_ids?: number[]; popularity?: number; adult?: boolean }[] }>(
+      '/movie/upcoming', { region: 'CA', language: 'en-US', page: String(page) },
+    );
+    for (const m of r?.results ?? []) {
+      if (seen.has(m.id) || m.adult || !m.release_date || m.release_date < today || !m.poster_path) continue;
+      seen.add(m.id);
+      const d = await tmdb<Parameters<typeof parseDetails>[0]>(`/movie/${m.id}`, { append_to_response: 'videos,credits', language: 'en-US' });
+      const meta = d ? parseDetails(d, 'movie') : {};
+      out.push({
+        id: `upcoming:${m.id}`, tmdbId: m.id, title: m.title, releaseDate: m.release_date, overview: m.overview ?? '',
+        genres: (m.genre_ids ?? []).map((g) => genres.get(g)).filter(Boolean), posterHi: meta.posterHi, backdrop: meta.backdrop,
+        trailer: meta.trailer, castPhotos: meta.castPhotos?.slice(0, 8), tagline: meta.tagline, popularity: m.popularity ?? 0,
+      });
+    }
+  }
+  out.sort((a, b) => String((a as { releaseDate: string }).releaseDate).localeCompare(String((b as { releaseDate: string }).releaseDate)));
+  writeFileSync(join(OUT, 'upcoming.json'), JSON.stringify({ version: 1, builtAt: Date.now(), movies: out }));
+  return out.length;
+}
+
 async function main() {
   const report = ['# TMDB', ''];
   if (!TOKEN) {
@@ -124,6 +151,11 @@ async function main() {
     const r = await enrich(c.shows as Item[] as Show[], 'tv');
     writeFileSync(showsFile, JSON.stringify(c));
     report.push(`- Series: looked up ${r.looked}, matched ${r.found}. Total with HD poster ${c.shows.filter((s) => s.posterHi).length}.`);
+  }
+  try {
+    report.push(`- Coming soon: ${await upcoming()} upcoming releases in Canada.`);
+  } catch {
+    report.push('- Coming soon: unavailable tonight.');
   }
   report.push('', 'This product uses the TMDB API but is not endorsed or certified by TMDB.');
   writeFileSync(join(OUT, 'tmdb-report.md'), report.join('\n'));

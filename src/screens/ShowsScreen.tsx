@@ -89,7 +89,7 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 56 }}>
       <View style={[styles.hero, { marginHorizontal: L.gutter }]}>
         <Image source={{ uri: hero.backdrop ?? hero.poster }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <LinearGradient colors={['rgba(6,7,11,0.2)', 'rgba(6,7,11,0.95)']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(28,23,25,0.2)', 'rgba(28,23,25,0.95)']} style={StyleSheet.absoluteFill} />
         <View style={styles.heroBody}>
           <Text style={styles.overline}>{watching[0] ? 'CONTINUE WATCHING' : 'FEATURED SERIES'}</Text>
           <Text style={[styles.heroTitle, L.compact && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>{hero.title}</Text>

@@ -6,22 +6,28 @@ import { Platform } from 'react-native';
  * lucide vectors, flags are real flag images.
  */
 export const colors = {
-  bg: '#06070B',
-  bgRaised: '#0D0F15',
-  surface: '#12141C',
-  surfaceHi: '#1A1D27',
-  line: 'rgba(255,255,255,0.07)',
-  lineHi: 'rgba(255,255,255,0.16)',
-  text: '#F4F5F7',
-  textDim: '#A3A8B5',
-  textFaint: '#666C7A',
-  gold: '#F2C14E',
-  goldDeep: '#7A5A12',
-  live: '#FF4545',
-  ok: '#2BD67B',
+  // Warm, cozy evening palette: espresso and plum instead of pure black.
+  bg: '#1C1719',
+  bgRaised: '#241E21',
+  surface: '#2C2528',
+  surfaceHi: '#372E32',
+  line: 'rgba(255,240,228,0.08)',
+  lineHi: 'rgba(255,240,228,0.17)',
+  text: '#FBF5EF',
+  textDim: '#CDBFB6',
+  textFaint: '#968880',
+  gold: '#F4B860',
+  goldDeep: '#8A5A1C',
+  coral: '#F28C6A',
+  live: '#FF5B5B',
+  ok: '#5BD69A',
   focus: '#FFFFFF',
-  overlay: 'rgba(6,7,11,0.78)',
+  overlay: 'rgba(28,23,25,0.84)',
 };
+
+/** Background as RGB, for gradients that fade into the page. */
+export const BG_RGB = '28,23,25';
+export const bgA = (a: number) => `rgba(${BG_RGB},${a})`;
 
 export const radius = { sm: 6, md: 10, lg: 14, xl: 22, pill: 999 };
 

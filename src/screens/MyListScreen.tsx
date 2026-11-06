@@ -3,12 +3,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Heart } from 'lucide-react-native';
 import type { Channel } from '../core/types';
 import type { Movie } from '../core/movies/types';
-import { PROFILES, useStreamHub } from '../state/useStreamHub';
+import { useStreamHub } from '../state/useStreamHub';
+import { useProfiles } from '../state/profiles';
 import { ChannelCard } from '../components/ChannelCard';
 import { MovieCard } from '../components/MovieCard';
 import { Row } from '../components/Row';
 import { colors, fonts, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
+import { clock } from '../hooks/useNow';
 
 interface Props {
   onPlay(c: Channel, row: Channel[]): void;
@@ -18,12 +20,14 @@ interface Props {
 export function MyListScreen({ onPlay, onMovie }: Props) {
   const L = useLayout();
   const pid = useStreamHub((s) => s.profile);
-  const profile = PROFILES.find((p) => p.id === pid);
+  const profile = useProfiles((s) => s.profiles).find((p) => p.id === pid);
   const byId = useStreamHub((s) => s.byId);
   const movieById = useStreamHub((s) => s.movieById);
   const favorites = useStreamHub((s) => s.favorites);
   const recents = useStreamHub((s) => s.recents);
   const movieList = useStreamHub((s) => s.movieList);
+  const reminders = useStreamHub((s) => s.reminders);
+  const toggleReminder = useStreamHub((s) => s.toggleReminder);
 
   const fav = useMemo(() => favorites.map((id) => byId.get(id)).filter((c): c is Channel => !!c), [favorites, byId]);
   const rec = useMemo(() => recents.map((id) => byId.get(id)).filter((c): c is Channel => !!c), [recents, byId]);
@@ -40,6 +44,21 @@ export function MyListScreen({ onPlay, onMovie }: Props) {
           <Text style={styles.emptyText}>
             Tap the heart while watching a channel, or "My Movies" on any film. Everything you save stays on this profile only.
           </Text>
+        </View>
+      ) : null}
+      {reminders.length ? (
+        <View style={{ marginHorizontal: L.gutter, marginBottom: 18, gap: 8 }}>
+          <Text style={styles.section}>Reminders</Text>
+          {reminders.map((r) => (
+            <View key={`${r.channelId}:${r.start}`} style={styles.reminder}>
+              <Text style={styles.remTime}>{clock(r.start)}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.remTitle} numberOfLines={1}>{r.title}</Text>
+                <Text style={styles.remSub} numberOfLines={1}>{byId.get(r.channelId)?.name ?? ''}</Text>
+              </View>
+              <Text style={styles.remCancel} onPress={() => toggleReminder(r)}>Cancel</Text>
+            </View>
+          ))}
         </View>
       ) : null}
       <Row
@@ -75,5 +94,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgRaised,
   },
   emptyHead: { ...type.h2, color: colors.text },
+  section: { color: colors.text, fontFamily: fonts.display, fontSize: 21 },
+  reminder: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, backgroundColor: colors.bgRaised, borderWidth: 1, borderColor: colors.line },
+  remTime: { color: colors.gold, fontFamily: fonts.bodyBold, fontSize: 13, width: 72 },
+  remTitle: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 14 },
+  remSub: { color: colors.textDim, fontFamily: fonts.body, fontSize: 12.5 },
+  remCancel: { color: colors.textDim, fontFamily: fonts.bodyBold, fontSize: 13, padding: 6 },
   emptyText: { color: colors.textDim, fontFamily: fonts.body, fontSize: 14, textAlign: 'center', maxWidth: 440 },
 });

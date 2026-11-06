@@ -75,6 +75,8 @@ export interface Channel {
   popularity: number;
   /** Best stream height, cached for badges ("4K", "HD"). */
   bestHeight: number;
+  /** When StreamHub first saw this channel (ms). Drives "Just Added". */
+  addedAt?: number;
   /** Lowercased search text: name, country, categories, aliases. */
   search: string;
 }

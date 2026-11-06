@@ -20,6 +20,8 @@ export const STREAMHUB_MOVIES_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/movies.json';
 export const STREAMHUB_SHOWS_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/shows.json';
+export const STREAMHUB_UPCOMING_URL =
+  'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/upcoming.json';
 export const STREAMHUB_EPG_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg.json';
 

@@ -9,6 +9,8 @@ import { HUBS, HUB_BY_ID } from '../core/catalog/hubs';
 import { useStreamHub } from '../state/useStreamHub';
 import { ChannelCard } from '../components/ChannelCard';
 import { MovieCard } from '../components/MovieCard';
+import { ShowCard } from './ShowsScreen';
+import type { Show } from '../core/shows/types';
 import { Row } from '../components/Row';
 import { Button, CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
@@ -21,15 +23,29 @@ interface Props {
   onMovie(m: Movie): void;
   onSeeAll(hub: HubId): void;
   onMovies(): void;
+  onShow?(s: Show): void;
 }
 
-export function HomeScreen({ onPlay, onMovie, onSeeAll, onMovies }: Props) {
+export function HomeScreen({ onPlay, onMovie, onSeeAll, onMovies, onShow }: Props) {
   const L = useLayout();
   const channels = useStreamHub((s) => s.channels);
   const byId = useStreamHub((s) => s.byId);
   const favorites = useStreamHub((s) => s.favorites);
   const recents = useStreamHub((s) => s.recents);
   const movies = useStreamHub((s) => s.movies);
+  const shows = useStreamHub((s) => s.shows);
+  // "Just Added": anything that arrived in the last 7 days.
+  const WEEK = 7 * 86_400_000;
+  const newChannels = useMemo(() => {
+    const cut = Date.now() - WEEK;
+    return channels.filter((c) => (c.addedAt ?? 0) > cut).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)).slice(0, 30);
+  }, [channels]); // eslint-disable-line react-hooks/exhaustive-deps
+  const newTitles = useMemo(() => {
+    const cut = Date.now() - WEEK;
+    const m = movies.filter((x) => (x.addedAt ?? 0) > cut).map((x) => ({ kind: 'movie' as const, item: x, at: x.addedAt ?? 0 }));
+    const sh = shows.filter((x) => (x.addedAt ?? 0) > cut).map((x) => ({ kind: 'show' as const, item: x, at: x.addedAt ?? 0 }));
+    return [...m, ...sh].sort((a, b) => b.at - a.at).slice(0, 30);
+  }, [movies, shows]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleFavorite = useStreamHub((s) => s.toggleFavorite);
   const load = useStreamHub((s) => s.load);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,7 +104,7 @@ export function HomeScreen({ onPlay, onMovie, onSeeAll, onMovies }: Props) {
             />
           ) : null}
           <LinearGradient
-            colors={['transparent', 'rgba(6,7,11,0.85)']}
+            colors={['transparent', 'rgba(28,23,25,0.85)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -130,6 +146,21 @@ export function HomeScreen({ onPlay, onMovie, onSeeAll, onMovies }: Props) {
 
       <Row title="Continue Watching" data={recentRow} keyOf={(c) => c.id} gutter={L.gutter} render={card(recentRow, colors.gold)} />
       <Row title="My List" data={favRow} keyOf={(c) => c.id} gutter={L.gutter} render={card(favRow, colors.gold)} />
+      <Row title="Just Added: Channels" subtitle={newChannels.length ? `${newChannels.length} this week` : undefined} accent={colors.ok} data={newChannels} keyOf={(c) => c.id} gutter={L.gutter} render={card(newChannels, colors.ok)} />
+      <Row
+        title="Just Added: Movies & Series"
+        accent={colors.ok}
+        data={newTitles}
+        keyOf={(x) => `${x.kind}:${x.item.id}`}
+        gutter={L.gutter}
+        render={(x) =>
+          x.kind === 'movie' ? (
+            <MovieCard movie={x.item} width={L.posterWidth} onPress={onMovie} />
+          ) : (
+            <ShowCard show={x.item} width={L.cardWidth} onPress={(sh) => onShow?.(sh)} />
+          )
+        }
+      />
 
       {hubRows.slice(0, 3).map(({ hub, count, row }) => (
         <Row

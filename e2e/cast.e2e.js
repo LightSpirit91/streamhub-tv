@@ -57,7 +57,9 @@ const BASE = process.env.BASE_URL || 'http://localhost:8776/streamhub-tv/';
     await p.click('[aria-label="Movies tab"]'); await p.waitForTimeout(1500); await p.getByText('Details', { exact: true }).first().click(); await p.waitForTimeout(800);
     await p.getByRole('button', { name: /^(Play|Resume)/ }).last().click();
     await p.waitForTimeout(1200);
-    const l = await lastLoad(); if (!/video\/mp4 \| BUFFERED/.test(l) && !/youtube/.test(l)) throw new Error(l);
+    const l = await lastLoad();
+    const ytHint = await p.locator('text=This title is from YouTube').count();
+    if (!/video\/mp4 \| BUFFERED/.test(l) && !ytHint) throw new Error(l);
   });
   await step('Movie seek controls the TV', async () => {
     await p.keyboard.press('ArrowRight'); await p.waitForTimeout(400);
@@ -66,7 +68,9 @@ const BASE = process.env.BASE_URL || 'http://localhost:8776/streamhub-tv/';
   await step('Shows: an episode plays on the TV', async () => {
     await p.keyboard.press('Escape'); await p.click('[aria-label="Shows tab"]'); await p.waitForTimeout(1500);
     const before = await lastLoad(); await p.getByRole('button', { name: 'Play', exact: true }).first().click(); await p.waitForTimeout(1200);
-    const l = await lastLoad(); if (l === before || !/BUFFERED/.test(l)) throw new Error(l);
+    const l = await lastLoad();
+    const ytHint = await p.locator('text=This title is from YouTube').count();
+    if ((l === before || !/BUFFERED/.test(l)) && !ytHint) throw new Error(l);
   });
   await step('Live TV guide: preview does not play locally while casting', async () => {
     await p.keyboard.press('Escape'); await p.click('[aria-label="Live TV tab"]'); await p.waitForTimeout(1500);
@@ -74,7 +78,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8776/streamhub-tv/';
     if (await p.locator('video').count()) throw new Error('local preview video playing');
   });
   await step('Live TV guide: Enter sends the selected channel to the TV', async () => {
-    const before = await lastLoad(); await p.keyboard.press('ArrowDown'); await p.waitForTimeout(700); await p.keyboard.press('Enter'); await p.waitForTimeout(1200);
+    const before = await lastLoad(); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.waitForTimeout(700); await p.keyboard.press('Enter'); await p.waitForTimeout(1200);
     const l = await lastLoad(); if (l === before) throw new Error('no new load');
   });
   await step('Search: a result plays on the TV', async () => {

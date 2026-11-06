@@ -6,7 +6,8 @@ import { loadCatalog, fetchText } from '../core/catalog/loader';
 import { applyHealth } from '../core/catalog/buildCatalog';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
-import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL } from '../core/catalog/sources';
+import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL, STREAMHUB_UPCOMING_URL } from '../core/catalog/sources';
+import type { UpcomingMovie } from '../core/movies/upcoming';
 import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
@@ -15,19 +16,8 @@ import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
 const device = detectDevice();
 
-export type ProfileId = 'arkadi' | 'mylove';
-
-export interface Profile {
-  id: ProfileId;
-  name: string;
-  /** Avatar gradient. */
-  colors: [string, string];
-}
-
-export const PROFILES: Profile[] = [
-  { id: 'arkadi', name: 'Arkadi', colors: ['#F2C14E', '#B9641A'] },
-  { id: 'mylove', name: 'My Love', colors: ['#FF6B9A', '#7B3FE4'] },
-];
+export type ProfileId = string;
+export type { Profile } from './profiles';
 
 /** Everything saved per profile lives under p:<profile>:<key>. */
 const pk = (p: ProfileId, k: string) => `p:${p}:${k}`;
@@ -38,6 +28,15 @@ interface ProfileData {
   lastChannelId?: string;
   movieList: string[];
   movieProgress: Record<string, number>;
+  reminders: Reminder[];
+}
+
+/** A programme in the TV guide this profile asked to be reminded about. */
+export interface Reminder {
+  channelId: string;
+  start: number;
+  end: number;
+  title: string;
 }
 
 function loadProfile(p: ProfileId): ProfileData {
@@ -47,6 +46,7 @@ function loadProfile(p: ProfileId): ProfileData {
     lastChannelId: readJSON<string | undefined>(pk(p, 'lastChannel'), undefined),
     movieList: readJSON<string[]>(pk(p, 'movieList'), []),
     movieProgress: readJSON<Record<string, number>>(pk(p, 'movieProgress'), {}),
+    reminders: readJSON<Reminder[]>(pk(p, 'reminders'), []).filter((r) => r.end * 1000 > Date.now()),
   };
 }
 
@@ -61,6 +61,7 @@ interface StreamHubState extends ProfileData {
   movieById: Map<string, Movie>;
   shows: Show[];
   showById: Map<string, Show>;
+  upcoming: UpcomingMovie[];
   /** TV guide: channel id -> programmes [start, end, title, desc?, category?] */
   epg: Record<string, Programme[]>;
   loadEpg(): Promise<void>;
@@ -73,6 +74,9 @@ interface StreamHubState extends ProfileData {
   reportStream(url: string, ok: boolean): void;
   toggleMovie(id: string): void;
   saveMovieProgress(id: string, seconds: number): void;
+  toggleReminder(r: Reminder): void;
+  /** Wipes a deleted profile's saved data. */
+  forgetProfile(id: string): void;
 }
 
 function prepare(channels: Channel[], health: Record<string, StreamHealth>) {
@@ -132,7 +136,7 @@ async function loadShows(force: boolean): Promise<Show[]> {
 }
 
 let healthTimer: ReturnType<typeof setTimeout> | undefined;
-const empty: ProfileData = { favorites: [], recents: [], movieList: [], movieProgress: {} };
+const empty: ProfileData = { favorites: [], recents: [], movieList: [], movieProgress: {}, reminders: [] };
 
 export const useStreamHub = create<StreamHubState>((set, get) => ({
   profile: null,
@@ -146,6 +150,7 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
   epg: {},
   shows: [],
   showById: new Map(),
+  upcoming: [],
   health: readJSON<Record<string, StreamHealth>>('health', {}),
 
   selectProfile(p) {
@@ -180,6 +185,12 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
     get().loadEpg();
     loadMovies(force).then((movies) => set({ movies, movieById: new Map(movies.map((m) => [m.id, m])) }));
     loadShows(force).then((shows) => set({ shows, showById: new Map(shows.map((x) => [x.id, x])) }));
+    fetchText(STREAMHUB_UPCOMING_URL, globalThis.fetch as never, 30_000)
+      .then((t) => {
+        const today = new Date().toISOString().slice(0, 10);
+        set({ upcoming: (JSON.parse(t) as { movies: UpcomingMovie[] }).movies.filter((m) => m.releaseDate >= today) });
+      })
+      .catch(() => {});
     try {
       const { catalog } = await getCatalog({
         store: fileBlobStore,
@@ -225,6 +236,20 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
     const next = movieList.includes(id) ? movieList.filter((m) => m !== id) : [id, ...movieList];
     set({ movieList: next });
     writeJSON(pk(profile, 'movieList'), next);
+  },
+
+  toggleReminder(r) {
+    const { profile, reminders } = get();
+    if (!profile) return;
+    const key = (x: Reminder) => `${x.channelId}:${x.start}`;
+    const next = reminders.some((x) => key(x) === key(r)) ? reminders.filter((x) => key(x) !== key(r)) : [...reminders, r].sort((a, b) => a.start - b.start);
+    set({ reminders: next });
+    writeJSON(pk(profile, 'reminders'), next);
+  },
+
+  forgetProfile(id) {
+    for (const k of ['favorites', 'recents', 'lastChannel', 'movieList', 'movieProgress', 'reminders']) writeJSON(pk(id, k), null);
+    if (get().profile === id) set({ profile: null, ...empty });
   },
 
   saveMovieProgress(id, seconds) {

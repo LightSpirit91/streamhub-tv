@@ -32,7 +32,7 @@ export function ShowDetail({ show, onPlay, onTrailer, onClose }: Props) {
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, L.compact ? styles.sheetPhone : { width: Math.min(960, L.width - 80) }]}>
         <Image source={{ uri: show.backdrop ?? show.poster }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={show.backdrop ? 0 : 40} />
-        <LinearGradient colors={['rgba(6,7,11,0.6)', 'rgba(6,7,11,0.98)']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(28,23,25,0.6)', 'rgba(28,23,25,0.98)']} style={StyleSheet.absoluteFill} />
         <FlatList
           data={list}
           keyExtractor={({ e }) => e.id}
