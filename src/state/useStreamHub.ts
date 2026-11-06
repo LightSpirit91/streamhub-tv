@@ -12,7 +12,10 @@ import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { genresFromTmdb } from '../core/movies/youtube';
-import { currentFreeLinks } from '../core/meta/tmdb';
+import { currentFreeLinks, type FreeLink } from '../core/meta/tmdb';
+
+/** Watchable only with a library card: ranked below titles anyone can play right away. */
+const libraryOnly = (l?: FreeLink[]) => !!l?.length && l.every((x) => x.name.endsWith('(library card)'));
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -97,6 +100,7 @@ const clean = (list: Movie[]) =>
     // Free-elsewhere titles: links rebuilt with today's rules (paid / blocked services dropped).
     .map((m) => (m.source === 'free' ? { ...m, freeOn: currentFreeLinks(m) } : m))
     .filter((m) => m.source !== 'free' || m.freeOn?.length)
+    .map((m) => (libraryOnly(m.freeOn) ? { ...m, popularity: Math.round(m.popularity / 4) } : m))
     .map((m) => ({
       ...m,
       title: stripEmoji(m.title),
@@ -104,7 +108,7 @@ const clean = (list: Movie[]) =>
     }));
 
 async function loadMovies(force: boolean): Promise<Movie[]> {
-  return clean(await loadMoviesRaw(force));
+  return clean(await loadMoviesRaw(force)).sort((a, b) => b.popularity - a.popularity);
 }
 
 async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
@@ -132,6 +136,8 @@ const cleanShows = (list: Show[]) =>
     .filter((x) => x.source !== 'youtube' && isWatchable({ title: x.title, description: x.description }))
     .map((x) => (x.source === 'free' ? { ...x, freeOn: currentFreeLinks(x) } : x))
     .filter((x) => x.source !== 'free' || x.freeOn?.length)
+    .map((x) => (libraryOnly(x.freeOn) ? { ...x, popularity: Math.round(x.popularity / 4) } : x))
+    .sort((a, b) => b.popularity - a.popularity)
     .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));
 
 async function loadShows(force: boolean): Promise<Show[]> {
