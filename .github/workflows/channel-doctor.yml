@@ -33,7 +33,13 @@ jobs:
           git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" prev || mkdir -p prev
           mkdir -p dist
           cp prev/*.json prev/*.md prev/*.csv dist/ 2>/dev/null || true
-      - run: npx tsx scripts/channel-doctor.ts --check --out dist
+      - run: npx tsx scripts/channel-doctor.ts --check --previous prev --out dist
+      - name: Channel previews
+        continue-on-error: true
+        run: |
+          command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          rm -rf dist/thumbs
+          npx tsx scripts/thumb-doctor.ts --catalog dist/catalog.json --out dist --max 500
       - run: npx tsx scripts/movie-doctor.ts --limit 5000 --previous prev/movies.json --out dist
         continue-on-error: true
         env:
@@ -51,4 +57,4 @@ jobs:
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary
-        run: cat dist/report.md dist/movies-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

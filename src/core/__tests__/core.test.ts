@@ -283,3 +283,32 @@ describe('enrichment', () => {
     expect(ufc.network).toBe('Pluto TV');
   });
 });
+
+describe('famelack + youtube', () => {
+  it('parses Famelack JSON with streams and official YouTube embeds', async () => {
+    const { parseFamelack } = await import('../m3u/famelack');
+    const entries = parseFamelack(JSON.stringify([
+      { name: 'Bob Ross', sources: { youtube: ['https://www.youtube-nocookie.com/embed/wMghm5USzOY'] }, country: 'us' },
+      { name: 'Kan 11', sources: { streams: ['https://kan.example/live.m3u8'] }, country: 'il', isGeoBlocked: true },
+    ]));
+    expect(entries).toHaveLength(2);
+    const c = buildCatalog([{ source: { id: 'famelack:us' }, entries }]);
+    const bob = c.channels.find((x) => x.name === 'Bob Ross')!;
+    expect(bob.streams[0].format).toBe('youtube');
+    expect(bob.streams[0].trust).toBe('official');
+    expect(c.channels.find((x) => x.name === 'Kan 11')!.streams[0].geoBlocked).toBe(true);
+  });
+});
+
+describe('graveyard', () => {
+  it('remembers channels that died and revives them when they work again', async () => {
+    const { updateGraveyard } = await import('../catalog/graveyard');
+    const ch = (id: string) => ({ id, name: id, hubs: [], streams: [], categories: [], popularity: 0, bestHeight: 0, search: id }) as never;
+    const day1 = updateGraveyard(undefined, [ch('a'), ch('b')], new Set(['a', 'b']), [ch('a')], 1000);
+    expect(day1.died).toEqual(['b']);
+    expect(day1.graveyard.entries.b.reason).toBe('dead');
+    const day2 = updateGraveyard(day1.graveyard, [ch('a')], new Set(['a', 'b']), [ch('a'), ch('b')], 2000);
+    expect(day2.revived).toEqual(['b']);
+    expect(day2.graveyard.entries.b).toBeUndefined();
+  });
+});

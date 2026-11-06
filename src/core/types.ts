@@ -47,7 +47,8 @@ export interface Stream {
   notAlwaysOn: boolean;
   trust: TrustTier;
   headers?: Record<string, string>;
-  format: 'hls' | 'dash' | 'progressive';
+  /** 'youtube' = an official YouTube live/video embed; url is the 11-char video id embed URL. */
+  format: 'hls' | 'dash' | 'progressive' | 'youtube';
   /** Source id (see sources.ts) that delivered this stream. */
   source: string;
   /** Precomputed rank. Higher plays first. Health adjusts it at runtime. */
@@ -66,6 +67,8 @@ export interface Channel {
   streams: Stream[];
   /** Short identifying line, e.g. "News · Pluto TV" or "Sports · USA". */
   tagline?: string;
+  /** A recent frame from the live stream (refreshed nightly). */
+  thumb?: string;
   /** Broadcaster / network from the iptv-org database. */
   network?: string;
   /** 0-100. Famous channels first in every row (see hubs.ts POPULAR). */

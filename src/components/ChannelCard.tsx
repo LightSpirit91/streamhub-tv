@@ -32,7 +32,9 @@ export function initials(name: string) {
 function ChannelCardBase({ channel, width, accent, favorite, onPress, preferredFocus }: Props) {
   const f = useFocusRing();
   const [logoFailed, setLogoFailed] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   const h = Math.round((width * 9) / 16);
+  const showThumb = !!channel.thumb && !thumbFailed;
   const now = useNow();
   const { now: on } = useProgramme(channel.id, now);
 
@@ -52,7 +54,24 @@ function ChannelCardBase({ channel, width, accent, favorite, onPress, preferredF
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        {channel.logo && !logoFailed ? (
+        {showThumb ? (
+          <>
+            <Image
+              source={{ uri: channel.thumb }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={200}
+              onError={() => setThumbFailed(true)}
+              recyclingKey={`${channel.id}-t`}
+            />
+            <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.65)']} style={StyleSheet.absoluteFill} />
+            {channel.logo && !logoFailed ? (
+              <View style={styles.thumbLogo}>
+                <Image source={{ uri: channel.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" onError={() => setLogoFailed(true)} />
+              </View>
+            ) : null}
+          </>
+        ) : channel.logo && !logoFailed ? (
           <Image
             source={{ uri: channel.logo }}
             style={styles.logo}
@@ -109,6 +128,10 @@ const styles = StyleSheet.create({
   initials: { fontFamily: fonts.displayHeavy, color: 'rgba(255,255,255,0.85)', letterSpacing: 1 },
   badges: { position: 'absolute', left: 8, bottom: 8, flexDirection: 'row', gap: 6 },
   fav: { position: 'absolute', right: 8, top: 8 },
+  thumbLogo: {
+    position: 'absolute', left: 8, top: 8, width: 54, height: 30, padding: 4, borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
   name: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 14 },
   line: { color: colors.textDim, fontFamily: fonts.body, fontSize: 12.5, marginTop: -2 },
   prog: { position: 'absolute', left: 0, right: 0, bottom: 0 },

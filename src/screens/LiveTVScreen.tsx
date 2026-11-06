@@ -5,7 +5,7 @@ import { Expand, Heart, Volume2, VolumeX } from 'lucide-react-native';
 import type { Channel, HubId } from '../core/types';
 import { HUBS, HUB_BY_ID } from '../core/catalog/hubs';
 import { useStreamHub } from '../state/useStreamHub';
-import StreamVideo from '../player/StreamVideo';
+import StreamVideo from '../player/MediaView';
 import { initials } from '../components/ChannelCard';
 import { Button, CountryTag, LiveBadge, QualityBadge, useFocusRing } from '../ui/primitives';
 import { colors, fonts, qualityLabel, radius, type } from '../ui/theme';

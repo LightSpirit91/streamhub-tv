@@ -12,7 +12,7 @@ import { useStreamHub } from '../state/useStreamHub';
 import { useRemote } from '../tv/useRemote';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
-import StreamVideo from './StreamVideo';
+import StreamVideo from './MediaView';
 import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
 import { clock, useNow } from '../hooks/useNow';
 import type { Fit } from './StreamVideo.types';

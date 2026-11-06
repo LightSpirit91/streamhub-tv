@@ -34,6 +34,7 @@ export function canPlay(s: Stream, env: DeviceEnv): boolean {
     case 'ios':
       return s.format !== 'dash';
     case 'web':
+      if (s.format === 'youtube') return true;
       if (s.format === 'dash') return false;
       if (s.headers) return false; // browsers forbid setting User-Agent/Referer
       if (env.secureContext && s.url.startsWith('http://')) return false;

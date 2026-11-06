@@ -1,5 +1,6 @@
 import type { Catalog } from '../types';
 import { parseM3U } from '../m3u/parseM3U';
+import { parseFamelack } from '../m3u/famelack';
 import { buildCatalog, CATALOG_VERSION, type SourceBatch } from './buildCatalog';
 import { SOURCES, STREAMHUB_CATALOG_URL, type PlaylistSource } from './sources';
 
@@ -39,7 +40,7 @@ export async function fetchSource(
   for (const url of source.urls) {
     try {
       const text = await fetchText(url, fetcher, timeoutMs);
-      const entries = parseM3U(text);
+      const entries = source.format === 'famelack' ? parseFamelack(text) : parseM3U(text);
       if (entries.length) return { source, entries };
     } catch {
       // next mirror

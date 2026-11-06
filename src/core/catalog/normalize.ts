@@ -42,6 +42,7 @@ export function hostOf(url: string): string {
 }
 
 export function trustOf(url: string, sourceId: string): TrustTier {
+  if (youtubeId(url)) return 'official'; // posted by the channel owner on YouTube
   const host = hostOf(url);
   if (OFFICIAL_HOST_PATTERNS.some((re) => re.test(host))) return 'official';
   if (OFFICIAL_SOURCE_FILES.test(sourceId)) return 'official';
@@ -49,8 +50,18 @@ export function trustOf(url: string, sourceId: string): TrustTier {
   return 'public';
 }
 
+/** Video id from youtube embed / watch / youtu.be links. Channel or live pages return undefined. */
+export function youtubeId(url: string): string | undefined {
+  const m =
+    /youtube(?:-nocookie)?\.com\/embed\/([A-Za-z0-9_-]{11})/.exec(url) ??
+    /youtube\.com\/watch\?(?:.*&)?v=([A-Za-z0-9_-]{11})/.exec(url) ??
+    /youtu\.be\/([A-Za-z0-9_-]{11})/.exec(url);
+  return m?.[1];
+}
+
 export function formatOf(url: string): Stream['format'] | null {
   const path = url.split(/[?#]/)[0].toLowerCase();
+  if (youtubeId(url)) return 'youtube';
   if (/(twitch\.tv|youtube\.com|youtu\.be|dailymotion\.com)\//i.test(url)) return null;
   if (path.endsWith('.mpd')) return 'dash';
   if (path.endsWith('.mp4') || path.endsWith('.ts')) return 'progressive';
@@ -125,12 +136,14 @@ export function scoreStream(s: Omit<Stream, 'score'>): number {
   if (s.geoBlocked) score -= 35;
   if (s.notAlwaysOn) score -= 15;
   if (s.format === 'dash') score -= 5; // HLS is the most reliable path on all players
+  if (s.format === 'youtube') score -= 20; // official, but prefer a direct stream when there is one
   return score;
 }
 
 export function toStream(entry: PlaylistEntry, info: NameInfo, sourceId: string): Stream | null {
   const format = formatOf(entry.url);
   if (!format) return null;
+  if (format === 'youtube') entry = { ...entry, url: `https://www.youtube-nocookie.com/embed/${youtubeId(entry.url)}` };
   const headers: Record<string, string> = {};
   if (entry.userAgent) headers['User-Agent'] = entry.userAgent;
   if (entry.referrer) headers['Referer'] = entry.referrer;

@@ -29,6 +29,8 @@ export interface PlaylistSource {
   countryFilter?: Set<string>;
   /** Extra category stamped on every entry, e.g. 'lang:heb' -> Israel hub. */
   tag?: string;
+  /** Playlist format. Default m3u. */
+  format?: 'm3u' | 'famelack';
   /** Loaded only when the user opens "Explore All". */
   lazy?: boolean;
 }
@@ -115,6 +117,16 @@ export const SOURCES: PlaylistSource[] = [
     ],
     countryFilter: PROFILE_COUNTRIES,
   },
+  // Famelack: curated + uptime-checked, includes official YouTube 24/7 lives.
+  ...['us', 'ca', 'ru', 'il', 'mx', 'ar', 'co', 'cl', 'pe', 've', 'gb'].map((cc) => ({
+    id: `famelack:${cc}`,
+    label: `Famelack ${cc.toUpperCase()}`,
+    urls: [
+      `https://raw.githubusercontent.com/famelack/famelack-channels/main/tv/raw/countries/${cc}.json`,
+      `https://cdn.jsdelivr.net/gh/famelack/famelack-channels@main/tv/raw/countries/${cc}.json`,
+    ],
+    format: 'famelack' as const,
+  })),
   {
     id: 'iptv-org:index',
     label: 'Everything (iptv-org full index)',

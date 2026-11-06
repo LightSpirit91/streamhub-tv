@@ -17,10 +17,13 @@ import { loadCatalog } from '../src/core/catalog/loader';
 import { SOURCES } from '../src/core/catalog/sources';
 import { assignSpotlight, byRank, finalizeChannel } from '../src/core/catalog/buildCatalog';
 import { HUBS } from '../src/core/catalog/hubs';
-import type { Channel, Stream } from '../src/core/types';
+import type { Catalog, Channel, Stream } from '../src/core/types';
 import { channelsCsv, channelsMarkdown } from './channel-list';
 import { parseCsv } from '../src/core/csv';
 import { enrichChannels, type DbChannel, type DbLogo } from '../src/core/catalog/enrich';
+import { updateGraveyard, type Graveyard } from '../src/core/catalog/graveyard';
+import { existsSync, readFileSync } from 'node:fs';
+import { youtubeId } from '../src/core/catalog/normalize';
 
 const DB = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 
@@ -40,6 +43,14 @@ async function enrich(channels: Channel[]) {
 const args = process.argv.slice(2);
 const CHECK = args.includes('--check');
 const OUT = args[args.indexOf('--out') + 1] && args.includes('--out') ? args[args.indexOf('--out') + 1] : 'dist';
+const PREV = args.includes('--previous') ? args[args.indexOf('--previous') + 1] : 'prev';
+const readJson = <T,>(path: string): T | undefined => {
+  try {
+    return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 type Verdict = 'ok' | 'dead' | 'locked' | 'timeout';
 
@@ -47,6 +58,12 @@ async function probe(s: Stream): Promise<Verdict> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
+    if (s.format === 'youtube') {
+      // oEmbed answers 200 for embeddable videos, 401/404 when embedding is off or the video is gone.
+      const id = youtubeId(s.url);
+      const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${id}`, { signal: ctrl.signal });
+      return res.ok ? 'ok' : res.status === 429 ? 'timeout' : 'dead';
+    }
     const res = await fetch(s.url, { signal: ctrl.signal, headers: s.headers, redirect: 'follow' });
     if (res.status === 403 || res.status === 451) return 'locked';
     if (!res.ok) return 'dead';
@@ -97,9 +114,17 @@ async function main() {
   catalog.channels.sort(byRank);
 
   let tally: Awaited<ReturnType<typeof checkAll>> | null = null;
+  let grave = { died: [] as string[], revived: [] as string[], size: 0 };
   if (CHECK) {
+    const listed = new Set(catalog.channels.map((c) => c.id));
     tally = await checkAll(catalog.channels);
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
+    // Remember what went offline; revive what came back.
+    const before = readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? [];
+    const g = updateGraveyard(readJson<Graveyard>(`${PREV}/graveyard.json`), before, listed, catalog.channels);
+    mkdirSync(OUT, { recursive: true });
+    writeFileSync(join(OUT, 'graveyard.json'), JSON.stringify(g.graveyard));
+    grave = { died: g.died, revived: g.revived, size: Object.keys(g.graveyard.entries).length };
     // finalizeChannel re-classifies, which clears Spotlight: pick it again
     // from the verified streams, then restore row order.
     assignSpotlight(catalog.channels);
@@ -121,6 +146,7 @@ async function main() {
     `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy).length}`,
     failed.length ? `- Sources unreachable: ${failed.join(', ')}` : '',
     tally ? `- Probe: ${tally.ok} ok, ${tally.locked} geo-locked (kept), ${tally.timeout} timeout (kept), ${tally.dead} dead (removed)` : '- Probe: skipped',
+    tally ? `- Graveyard: ${grave.died.length} went offline tonight, ${grave.revived.length} came back to life, ${grave.size} remembered` : '',
     ``,
     `| Hub | Channels |`,
     `|---|---|`,
