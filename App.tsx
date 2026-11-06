@@ -6,6 +6,11 @@ import { loadCatalog } from './src/core/catalog/loader';
 import { HUBS } from './src/core/catalog/hubs';
 import type { Catalog } from './src/core/types';
 import { fileBlobStore } from './src/services/storage';
+import { detectDevice } from './src/services/device';
+import { channelsForDevice } from './src/core/platform/compat';
+
+const device = detectDevice();
+const forDevice = (c: Catalog): Catalog => ({ ...c, channels: channelsForDevice(c.channels, device) });
 
 /**
  * Step 1 boot screen: proves the data engine on a real device (download,
@@ -20,9 +25,9 @@ export default function App() {
     getCatalog({
       store: fileBlobStore,
       load: () => loadCatalog({ onProgress: (d, t) => setProgress(`Loading sources ${d}/${t}`) }),
-      onBackgroundUpdate: setCatalog,
+      onBackgroundUpdate: (c) => setCatalog(forDevice(c)),
     })
-      .then((r) => setCatalog(r.catalog))
+      .then((r) => setCatalog(forDevice(r.catalog)))
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -39,7 +44,7 @@ export default function App() {
       {error && <Text style={styles.err}>{error}</Text>}
       {catalog && (
         <ScrollView contentContainerStyle={{ gap: 10 }}>
-          <Text style={styles.dim}>{catalog.channels.length} channels ready</Text>
+          <Text style={styles.dim}>{catalog.channels.length} channels ready on this {device.kind} device</Text>
           {HUBS.map((h) => (
             <View key={h.id} style={[styles.row, { borderLeftColor: h.accent }]}>
               <Text style={styles.hub}>{h.title}</Text>

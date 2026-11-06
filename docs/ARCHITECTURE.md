@@ -1,6 +1,6 @@
 # StreamHub TV: Architecture & Build Plan
 
-Last updated: 2026-11-06 · Step 1 of 6 complete
+Last updated: 2026-11-06 · Step 1 of 6 complete · Runs on TV, iPhone, iPad, Mac, Android and web
 
 ---
 
@@ -14,11 +14,60 @@ Last updated: 2026-11-06 · Step 1 of 6 complete
 | Dead links | A stream that fails 3 times in a row is hidden. Re-tested on the next 24h refresh. Nightly Channel Doctor removes confirmed-dead links for everyone. |
 | Player | Channel zapping, 10 recent channels, Picture-in-Picture, auto-failover, resume on launch. Custom overlay: play/pause, mute, volume, fullscreen, aspect (Fit / Fill / Zoom). |
 | Extras | TV Guide (EPG), your own M3U playlists, interface in English / Español / Русский / עברית (with right-to-left layout for Hebrew). |
-| Platform | One codebase: Android TV / Fire TV first, phone second. Built with Expo SDK 58 + `react-native-tvos` 0.88. |
+| Platform | One codebase, every screen: Samsung TV (via Fire TV Stick), iPhone, iPad, Mac (native app on Apple Silicon, web app on any Mac), Android, any browser. Built with Expo SDK 58 + `react-native-tvos` 0.88 + `react-native-web`. |
 
 ---
 
-## 2. Watching on your Samsung TV
+## 2. Every device you own
+
+One codebase builds three apps: Android/Fire TV, Apple (iPhone, iPad, Mac), and Web. Your favorites, recents and settings stay on each device for now. Sync across devices is a later add-on.
+
+| Device | How it runs | Channels playable today | Cost |
+|---|---|---|---|
+| Samsung TV | Fire TV Stick app (section 2a) | 4,726 (all) | the stick |
+| iPhone / iPad | Native app via TestFlight | 4,719 | Apple Developer Program, $99 USD/year |
+| MacBook / iMac with Apple Silicon (M1 or newer) | The same iPhone/iPad app, running natively on the Mac via TestFlight | 4,719 | included in the above |
+| Any Mac, PC or tablet browser | Web version at a private link | 4,038 | free |
+| Android phone | APK, same install as the Fire Stick | 4,726 | free |
+
+**Why the browser plays fewer channels.** Browsers block three things native apps allow: old `http://` streams on a secure page, streams that need a custom header, and DASH format. Russian and Israeli channels lean on those, so in a browser Russian drops from 447 to 283 and Israel from 35 to 19. For those hubs, use the native apps. StreamHub filters per device automatically (`src/core/platform/compat.ts`), so you never see a channel your screen can't play.
+
+**Check your Macs:** Apple menu → About This Mac. "Chip: Apple M..." means the native app runs there. "Processor: Intel" means use the web version.
+
+**Free route for iPhone:** open the web version in Safari → Share → Add to Home Screen. It opens full-screen like an app, with the browser's channel limits.
+
+**Bonus:** the Samsung TV's own web browser can open the web version before the stick arrives. It works, but navigating it with the TV remote is clunky.
+
+### Controls on every device
+
+| Action | TV remote | Mac keyboard / mouse | iPhone touch |
+|---|---|---|---|
+| Move | Arrows | Arrows, or mouse | Swipe rows |
+| Select | OK | Enter / click | Tap |
+| Back | Back | Esc | Swipe from edge |
+| Play / pause | Play/Pause | Space | Tap video |
+| Next / previous channel | Up / Down in fullscreen | Up / Down or Page Up / Down | Swipe up / down on video |
+| Fullscreen | (always) | F / double-click | Rotate or double-tap |
+| Mute | Mute (CEC) | M | Mute button |
+| Search | Search tab | / or ⌘K | Search tab |
+| Live Peek | Rest on a card 1.2s | Hover 1.2s | Long press |
+
+### One design, four densities
+
+- **TV:** 10-foot layout, focus glow, 5% overscan margins, 24px minimum text.
+- **Desktop:** side navigation rail, wide hero, hover previews, 6-7 cards per row.
+- **Tablet:** same as desktop, touch-sized.
+- **Phone:** bottom tab bar, 2.5 cards visible per row, vertical hero, full-screen player on rotate.
+
+### Video playback per device
+
+- Fire TV / Android: ExoPlayer (HLS + DASH, custom headers, Picture-in-Picture).
+- iPhone / iPad / Mac app: AVPlayer (HLS, custom headers, Picture-in-Picture, AirPlay to Apple TV).
+- Safari: native HLS. Chrome / Firefox / Edge: hls.js.
+
+---
+
+## 2a. Watching on your Samsung TV
 
 Samsung TVs run Tizen, not Android. A React Native app can't install there directly. The clean path:
 
@@ -166,8 +215,11 @@ streamhub-tv/
     │   ├── search/search.ts        name/country/genre + RU/HE aliases
     │   ├── health/failover.ts      retry/failover machine, zap, recents
     │   └── __tests__/core.test.ts
+    │   └── platform/compat.ts      which streams each device can play ✅
     ├── services/
-    │   └── storage.ts              file cache (catalog) + MMKV (state) ✅
+    │   ├── storage.ts              native: file cache + MMKV           ✅
+    │   ├── storage.web.ts          browser: IndexedDB + localStorage   ✅
+    │   └── device.ts               device + form factor detection      ✅
     ├── state/                      zustand stores                     Step 2
     ├── theme/                      Marquee tokens, hub palettes       Step 2
     ├── tv/                         D-pad focus engine, key events     Step 2
@@ -186,18 +238,20 @@ streamhub-tv/
 
 | Step | What ships | Status |
 |---|---|---|
-| 1 | Data engine: parser, sources, ranking, hubs, cache, search, failover, Channel Doctor, TV build config | ✅ done |
-| 2 | Marquee design system, Home (hero + rows), Hub pages, D-pad focus engine | next |
-| 3 | Player: overlay controls, aspect modes, Retrying overlay, failover, zapping wheel, PiP, recents, resume | |
+| 1 | Data engine: parser, sources, ranking, hubs, cache, search, failover, Channel Doctor, TV build config, cross-device layer (iOS, Mac, web) | ✅ done |
+| 2 | Marquee design system with 4 densities, Home (hero + rows), Hub pages, one input engine for remote, keyboard, mouse and touch | next |
+| 3 | Player: overlay controls, aspect modes, Retrying overlay, failover, zapping wheel, PiP, AirPlay, hls.js for browsers, recents, resume | |
 | 4 | Search, Library/Favorites, My Playlists, Settings, 4 languages + RTL | |
 | 5 | TV Guide: nightly XMLTV → compact guide.json, Now/Next everywhere | |
-| 6 | Your Services row, first APK on your Fire Stick | |
+| 6 | Your Services row. First installs: APK on the Fire Stick, TestFlight on iPhone and Mac, web version at a private link | |
 
 ### Your weekend checklist
 
 - [ ] Buy a Fire TV Stick 4K Max (Fire OS, not Vega OS) and plug it into the Samsung.
-- [ ] Create a free account at expo.dev (needed for cloud builds).
-- [ ] Turn on Developer Options on the stick and install Downloader (section 2).
+- [ ] Create a free account at expo.dev (needed for cloud builds and web hosting).
+- [ ] Turn on Developer Options on the stick and install Downloader (section 2a).
+- [ ] Join the Apple Developer Program ($99 USD/year) for the iPhone and Mac apps. Skip it if the free web version is enough on Apple devices.
+- [ ] Check whether each Mac says "Chip: Apple M..." or "Processor: Intel".
 
 ---
 
@@ -210,4 +264,6 @@ npm run doctor                   # build catalog locally → dist/
 npx tsx scripts/channel-doctor.ts --check   # same + probe every stream
 EXPO_TV=1 npx expo prebuild -p android      # generate the Android TV project
 npx eas-cli build -p android --profile tv   # APK for Fire TV
+npx eas-cli build -p ios --profile ios --auto-submit   # TestFlight: iPhone, iPad, Apple Silicon Mac
+npx expo export -p web                      # web version → dist/
 ```

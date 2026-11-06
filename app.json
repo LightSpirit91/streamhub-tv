@@ -17,7 +17,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lightspirit91.streamhub",
       "infoPlist": {
-        "NSAppTransportSecurity": { "NSAllowsArbitraryLoads": true }
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
@@ -31,12 +36,36 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "StreamHub",
+      "themeColor": "#07070A",
+      "backgroundColor": "#07070A"
     },
     "plugins": [
-      ["@react-native-tvos/config-tv", { "isTV": false, "removeFlipperOnAndroid": true }],
-      ["expo-video", { "supportsPictureInPicture": true, "supportsBackgroundPlayback": true }],
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
+      [
+        "@react-native-tvos/config-tv",
+        {
+          "isTV": false,
+          "removeFlipperOnAndroid": true
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true,
+          "supportsBackgroundPlayback": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       "expo-localization"
     ]
   }
