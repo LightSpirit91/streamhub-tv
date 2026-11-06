@@ -1,0 +1,40 @@
+# Keeps the TV guide fresh between nightly rebuilds: every 6 hours.
+name: TV Guide
+
+on:
+  schedule:
+    - cron: '43 3,15,21 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-branch
+  cancel-in-progress: false
+
+jobs:
+  guide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
+      - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
+      - name: Publish
+        run: |
+          cd dist
+          rm -rf .git
+          git init -q -b catalog
+          git config user.name "tv-guide"
+          git config user.email "tv-guide@users.noreply.github.com"
+          git add -A
+          git commit -qm "TV guide $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
+      - run: cat dist/epg-report.md >> "$GITHUB_STEP_SUMMARY"

@@ -10,13 +10,13 @@ export const ARCHIVE_COLLECTIONS = [
   'Western_Films', 'Horror_Films', 'Mystery_Films', 'Musical_Films', 'War_Films', 'documentaryandshortfilms',
 ];
 
-export function searchUrl(rows: number, page = 1): string {
+export function searchUrl(rows: number, page = 1, sort = 'downloads desc'): string {
   const q = `collection:(${ARCHIVE_COLLECTIONS.join(' OR ')}) AND mediatype:movies`;
   const fl = ['identifier', 'title', 'year', 'downloads', 'subject', 'description', 'runtime', 'language', 'collection'];
   const params = [
     `q=${encodeURIComponent(q)}`,
     ...fl.map((f) => `fl[]=${f}`),
-    'sort[]=downloads+desc',
+    `sort[]=${sort.replace(' ', '+')}`,
     `rows=${rows}`,
     `page=${page}`,
     'output=json',
@@ -184,6 +184,24 @@ export interface SearchDoc {
   runtime?: string;
 }
 
+export function qualityOf(f?: ArchiveFile): string | undefined {
+  const h = Number(f?.height ?? 0);
+  if (h >= 1000) return 'HD 1080p';
+  if (h >= 700) return 'HD 720p';
+  if (h > 0) return 'SD';
+  return undefined;
+}
+
+/** "urn:imdb:tt0032599" or "tt0032599" -> "tt0032599" */
+export function imdbIdFrom(raw: unknown): string | undefined {
+  const list = Array.isArray(raw) ? raw : [raw];
+  for (const x of list) {
+    const m = /\b(tt\d{6,9})\b/.exec(String(x ?? ''));
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
 export function toMovie(doc: SearchDoc, files: ArchiveFile[]): Movie | null {
   const file = pickVideoFile(files);
   if (!file || !doc.title || !isWatchable(doc)) return null;
@@ -200,6 +218,7 @@ export function toMovie(doc: SearchDoc, files: ArchiveFile[]): Movie | null {
     year,
     genres: [...new Set(genres)],
     language: languageOf(doc.language),
+    quality: qualityOf(file),
     minutes: mins,
     description: cleanText(doc.description),
     poster: posterUrl(doc.identifier),

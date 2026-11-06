@@ -19,6 +19,23 @@ import { assignSpotlight, byRank, finalizeChannel } from '../src/core/catalog/bu
 import { HUBS } from '../src/core/catalog/hubs';
 import type { Channel, Stream } from '../src/core/types';
 import { channelsCsv, channelsMarkdown } from './channel-list';
+import { parseCsv } from '../src/core/csv';
+import { enrichChannels, type DbChannel, type DbLogo } from '../src/core/catalog/enrich';
+
+const DB = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
+
+async function enrich(channels: Channel[]) {
+  try {
+    const [c, l] = await Promise.all([
+      fetch(`${DB}/channels.csv`).then((r) => r.text()),
+      fetch(`${DB}/logos.csv`).then((r) => r.text()),
+    ]);
+    return enrichChannels(channels, parseCsv(c) as unknown as DbChannel[], parseCsv(l) as unknown as DbLogo[]);
+  } catch (e) {
+    console.warn('enrich failed', e);
+    return { logos: 0, taglines: 0 };
+  }
+}
 
 const args = process.argv.slice(2);
 const CHECK = args.includes('--check');
@@ -74,6 +91,11 @@ async function main() {
   process.stdout.write('\n');
   for (const s of SOURCES) if (!s.lazy && !catalog.sources.includes(s.id)) failed.push(s.id);
 
+  const enriched = await enrich(catalog.channels);
+  for (const c of catalog.channels) finalizeChannel(c);
+  assignSpotlight(catalog.channels);
+  catalog.channels.sort(byRank);
+
   let tally: Awaited<ReturnType<typeof checkAll>> | null = null;
   if (CHECK) {
     tally = await checkAll(catalog.channels);
@@ -93,6 +115,7 @@ async function main() {
     `Built ${new Date(catalog.builtAt).toISOString()} in ${((Date.now() - started) / 1000).toFixed(0)}s`,
     ``,
     `- Channels: **${catalog.channels.length}**`,
+    `- With logo: ${catalog.channels.filter((c) => c.logo).length} · with description: ${catalog.channels.filter((c) => c.tagline).length} (database matched ${enriched.logos} logos)`,
     `- Streams: ${catalog.channels.reduce((n, c) => n + c.streams.length, 0)}`,
     `- 4K: ${q(2160)} · 1080p+: ${q(1080)} · 720p+: ${q(720)}`,
     `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy).length}`,

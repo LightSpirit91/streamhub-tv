@@ -72,3 +72,31 @@ describe('archive movies', () => {
     expect(decodeURIComponent(searchUrl(10))).toContain('collection:(feature_films');
   });
 });
+
+describe('movie metadata', () => {
+  it('reads IMDb ids and video quality', async () => {
+    const { imdbIdFrom, qualityOf } = await import('../movies/archive');
+    expect(imdbIdFrom(['urn:oclc:123', 'urn:imdb:tt0032599'])).toBe('tt0032599');
+    expect(imdbIdFrom(undefined)).toBeUndefined();
+    expect(qualityOf({ name: 'a.mp4', height: '1080' })).toBe('HD 1080p');
+    expect(qualityOf({ name: 'a.mp4', height: '480' })).toBe('SD');
+  });
+
+  it('builds and parses the Wikidata credits query', async () => {
+    const { creditsQuery, parseCredits } = await import('../movies/wikidata');
+    expect(creditsQuery(['his_girl_friday'])).toContain('VALUES ?ia { "his_girl_friday" }');
+    const c = parseCredits({
+      results: {
+        bindings: [{
+          ia: { value: 'his_girl_friday' }, imdb: { value: 'tt0032599' },
+          dirs: { value: 'Howard Hawks' }, casts: { value: 'Cary Grant|Rosalind Russell' },
+          country: { value: 'United States' }, wiki: { value: 'https://en.wikipedia.org/wiki/His_Girl_Friday' },
+        }],
+      },
+    });
+    expect(c.get('his_girl_friday')).toEqual({
+      imdbId: 'tt0032599', director: ['Howard Hawks'], cast: ['Cary Grant', 'Rosalind Russell'],
+      country: 'United States', wikipedia: 'https://en.wikipedia.org/wiki/His_Girl_Friday',
+    });
+  });
+});

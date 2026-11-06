@@ -64,6 +64,10 @@ export interface Channel {
   hubs: HubId[];
   /** Ordered best-first. Auto-failover walks this list. */
   streams: Stream[];
+  /** Short identifying line, e.g. "News · Pluto TV" or "Sports · USA". */
+  tagline?: string;
+  /** Broadcaster / network from the iptv-org database. */
+  network?: string;
   /** 0-100. Famous channels first in every row (see hubs.ts POPULAR). */
   popularity: number;
   /** Best stream height, cached for badges ("4K", "HD"). */

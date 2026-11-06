@@ -1,6 +1,6 @@
-# Self-healing channel list. Every night: pull all playlists, merge, probe
-# every stream, drop dead links, publish catalog.json to the `catalog`
-# branch. The app downloads that file once a day (or on pull-to-refresh).
+# Nightly self-healing library. Pulls every playlist, tests every stream,
+# drops dead links, grows the movie library, builds the TV guide, and
+# publishes everything to the `catalog` branch. The app reads from there.
 name: Channel Doctor
 
 on:
@@ -11,14 +11,15 @@ on:
 permissions:
   contents: write
 
+# Shared with the TV guide refresh so two jobs never publish at once.
 concurrency:
-  group: channel-doctor
-  cancel-in-progress: true
+  group: catalog-branch
+  cancel-in-progress: false
 
 jobs:
   doctor:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,18 +28,27 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx vitest run
+      - name: Restore yesterday's library
+        run: |
+          git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" prev || mkdir -p prev
+          mkdir -p dist
+          cp prev/*.json prev/*.md prev/*.csv dist/ 2>/dev/null || true
       - run: npx tsx scripts/channel-doctor.ts --check --out dist
-      - run: npx tsx scripts/movie-doctor.ts --limit 5000 --out dist
+      - run: npx tsx scripts/movie-doctor.ts --limit 5000 --previous prev/movies.json --out dist
+        continue-on-error: true
+        env:
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+      - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
         continue-on-error: true
       - name: Publish to catalog branch
         run: |
           cd dist
+          rm -rf .git
           git init -q -b catalog
           git config user.name "channel-doctor"
           git config user.email "channel-doctor@users.noreply.github.com"
-          git add catalog.json report.md channels.md channels.csv
-          [ -f movies.json ] && git add movies.json
+          git add -A
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary
-        run: cat dist/report.md >> "$GITHUB_STEP_SUMMARY"
+        run: cat dist/report.md dist/movies-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

@@ -88,7 +88,7 @@ export function finalizeChannel(ch: Channel): void {
   ch.bestHeight = ch.streams.reduce((m, s) => Math.max(m, s.height), 0);
   ch.hubs = classify(ch);
   ch.popularity = popularity(ch.name, ch.country);
-  ch.search = [ch.name, ch.country ?? '', ...ch.categories, ...ch.hubs].join(' ').toLowerCase();
+  ch.search = [ch.name, ch.country ?? '', ch.network ?? '', ...ch.categories, ...ch.hubs].join(' ').toLowerCase();
 }
 
 /** Row order everywhere: famous first, then best stream. */

@@ -11,6 +11,18 @@ export interface Movie {
   minutes?: number;
   /** Original language when it is not English (drives the World Cinema rows). */
   language?: string;
+  /** "HD 1080p", "HD 720p", "SD". */
+  quality?: string;
+  /** When this film first entered the StreamHub library (ms). */
+  addedAt?: number;
+  imdbId?: string;
+  /** IMDb rating out of 10 and vote count (via OMDb, when a key is configured). */
+  imdbRating?: number;
+  imdbVotes?: number;
+  director?: string[];
+  cast?: string[];
+  country?: string;
+  wikipedia?: string;
   source: 'archive';
   /** Popularity at the source, used for ordering. */
   popularity: number;

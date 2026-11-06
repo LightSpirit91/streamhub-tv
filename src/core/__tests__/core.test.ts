@@ -267,3 +267,19 @@ describe('failover', () => {
     expect(rec[0]).toBe('c10');
   });
 });
+
+describe('enrichment', () => {
+  it('adds database logos, taglines and Pluto logos', async () => {
+    const { enrichChannels } = await import('../catalog/enrich');
+    const { parseCsv } = await import('../csv');
+    const c = buildCatalog([{ source: { id: 's' }, entries: parseM3U(IPTV_ORG) }]);
+    const db = parseCsv('id,name,alt_names,network,country,categories,is_nsfw\nKan11.il,Kan 11,,,IL,general,FALSE\n');
+    const logos = parseCsv('channel,feed,in_use,width,format,url\nKan11.il,,TRUE,512,PNG,https://x/kan.png\n');
+    enrichChannels(c.channels, db as never, logos as never);
+    const kan = c.channels.find((x) => x.id === 'kan11.il')!;
+    expect(kan.tagline).toBe('General · Israel');
+    const ufc = c.channels.find((x) => x.name === 'UFC')!;
+    expect(ufc.logo).toBe('https://images.pluto.tv/channels/69a20556814d27f4ae630a92/colorLogoPNG.png');
+    expect(ufc.network).toBe('Pluto TV');
+  });
+});

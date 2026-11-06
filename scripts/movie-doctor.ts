@@ -1,25 +1,41 @@
 /**
- * Builds dist/movies.json from the Internet Archive feature film collections.
- * Runs nightly next to the Channel Doctor.
- * Usage: npx tsx scripts/movie-doctor.ts [--limit 600] [--out dist]
+ * Builds dist/movies.json, the StreamHub movie library. Runs every night.
+ *
+ * - Cumulative: starts from yesterday's library (--previous), so the
+ *   library only grows.
+ * - New arrivals: also scans the newest uploads every night, stamped with
+ *   addedAt for the "New on StreamHub" row.
+ * - Incremental: only titles we have never seen cost a metadata request.
+ * - Credits from Wikidata (director, cast, country, IMDb id, Wikipedia).
+ * - IMDb ratings from OMDb when the OMDB_API_KEY secret is set
+ *   (free key, 1,000 lookups a day; ratings fill in over a few nights).
+ *
+ * Usage: npx tsx scripts/movie-doctor.ts [--limit 5000] [--previous prev/movies.json] [--out dist]
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isWatchable, titleKey, metadataUrl, searchUrl, toMovie, type ArchiveFile, type SearchDoc } from '../src/core/movies/archive';
+import {
+  imdbIdFrom, isWatchable, metadataUrl, runtimeMinutes, searchUrl, titleKey, toMovie,
+  type ArchiveFile, type SearchDoc,
+} from '../src/core/movies/archive';
+import { creditsQuery, parseCredits } from '../src/core/movies/wikidata';
 import type { Movie, MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
 const LIMIT = Number(arg('--limit', '5000'));
+const PREVIOUS = arg('--previous', 'prev/movies.json');
 const OUT = arg('--out', 'dist');
-const UA = { 'User-Agent': 'StreamHub-MovieDoctor/1.0 (+https://github.com/LightSpirit91/streamhub-tv)' };
+const OMDB_KEY = process.env.OMDB_API_KEY;
+const OMDB_DAILY = 900;
+const UA = { 'User-Agent': 'StreamHub-MovieDoctor/1.1 (+https://github.com/LightSpirit91/streamhub-tv)' };
 
-async function json<T>(url: string): Promise<T> {
+async function json<T>(url: string, init?: RequestInit): Promise<T> {
   for (let i = 0; i < 3; i++) {
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 30_000);
-      const res = await fetch(url, { headers: UA, signal: ctrl.signal });
+      const t = setTimeout(() => ctrl.abort(), 45_000);
+      const res = await fetch(url, { ...init, headers: { ...UA, ...((init?.headers as Record<string, string>) ?? {}) }, signal: ctrl.signal });
       clearTimeout(t);
       if (res.ok) return (await res.json()) as T;
     } catch {
@@ -30,50 +46,143 @@ async function json<T>(url: string): Promise<T> {
   throw new Error(`Failed: ${url}`);
 }
 
-async function main() {
+async function search(sort: string, max: number): Promise<SearchDoc[]> {
   const docs: SearchDoc[] = [];
-  for (let page = 1; docs.length < LIMIT; page++) {
-    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(1000, LIMIT), page));
+  for (let page = 1; docs.length < max; page++) {
+    const r = await json<{ response: { docs: SearchDoc[] } }>(searchUrl(Math.min(1000, max), page, sort));
     if (!r.response.docs.length) break;
     docs.push(...r.response.docs);
   }
-  const before = docs.length;
-  docs.splice(0, docs.length, ...docs.filter(isWatchable));
-  console.log(`search: ${before} candidates, ${docs.length} after content filter`);
+  return docs.filter(isWatchable);
+}
 
-  const movies: Movie[] = [];
+async function pool<T>(items: T[], size: number, fn: (t: T) => Promise<void>) {
   let i = 0;
   await Promise.all(
-    Array.from({ length: 24 }, async () => {
-      while (i < Math.min(docs.length, LIMIT)) {
-        const d = docs[i++];
-        try {
-          const meta = await json<{ files?: ArchiveFile[]; metadata?: { runtime?: string } }>(metadataUrl(d.identifier));
-          const m = toMovie({ ...d, runtime: d.runtime ?? meta.metadata?.runtime }, meta.files ?? []);
-          if (m) movies.push(m);
-        } catch {
-          // skip this title
-        }
-      }
+    Array.from({ length: size }, async () => {
+      while (i < items.length) await fn(items[i++]);
     }),
   );
+}
 
-  // Dedupe by normalized title + year, keep the most popular copy.
+async function main() {
+  const now = Date.now();
+  const previous: Movie[] = existsSync(PREVIOUS) ? (JSON.parse(readFileSync(PREVIOUS, 'utf8')) as MovieCatalog).movies : [];
+  const library = new Map(previous.map((m) => [m.id, m]));
+  console.log(`previous library: ${previous.length}`);
+
+  const [popular, newest] = await Promise.all([search('downloads desc', LIMIT), search('addeddate desc', 800)]);
+  const docs = new Map<string, SearchDoc>();
+  for (const d of [...popular, ...newest]) docs.set(d.identifier, d);
+  console.log(`search: ${popular.length} popular + ${newest.length} newest = ${docs.size} candidates`);
+
+  // Refresh known titles from search data; fetch metadata only for new ones.
+  const fresh: SearchDoc[] = [];
+  for (const d of docs.values()) {
+    const m = library.get(d.identifier);
+    if (m) m.popularity = Math.max(m.popularity, d.downloads ?? 0);
+    else fresh.push(d);
+  }
+  let added = 0;
+  await pool(fresh, 24, async (d) => {
+    try {
+      const meta = await json<{ files?: ArchiveFile[]; metadata?: Record<string, unknown> }>(metadataUrl(d.identifier));
+      const md = meta.metadata ?? {};
+      const m = toMovie({ ...d, runtime: d.runtime ?? (md.runtime as string | undefined) }, meta.files ?? []);
+      if (!m) return;
+      if (previous.length) m.addedAt = now; // the very first build has no "new" titles
+      m.imdbId = imdbIdFrom(md['external-identifier']) ?? imdbIdFrom(md.imdb);
+      m.minutes ??= runtimeMinutes(md.runtime as string | undefined);
+      library.set(m.id, m);
+      added++;
+    } catch {
+      // skip this title tonight, retry tomorrow
+    }
+  });
+  console.log(`new titles added: ${added}`);
+
+  // Credits from Wikidata for titles that haven't been checked yet.
+  const needCredits = [...library.values()].filter((m) => m.director === undefined);
+  let credited = 0;
+  for (let i = 0; i < needCredits.length; i += 150) {
+    const batch = needCredits.slice(i, i + 150);
+    try {
+      const q = creditsQuery(batch.map((m) => m.id));
+      const res = await json<Parameters<typeof parseCredits>[0]>(
+        `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(q)}`,
+        { headers: { Accept: 'application/sparql-results+json' } },
+      );
+      const credits = parseCredits(res);
+      for (const m of batch) {
+        const c = credits.get(m.id);
+        m.director = c?.director ?? []; // [] = checked, nothing found
+        m.cast = c?.cast ?? [];
+        if (c?.imdbId) m.imdbId ??= c.imdbId;
+        if (c?.country) m.country = c.country;
+        if (c?.wikipedia) m.wikipedia = c.wikipedia;
+        if (c) credited++;
+      }
+    } catch {
+      // Wikidata busy: these titles get another chance tomorrow.
+    }
+  }
+  console.log(`credits from Wikidata: ${credited} of ${needCredits.length} checked`);
+
+  // IMDb ratings via OMDb (optional).
+  let rated = 0;
+  if (OMDB_KEY) {
+    const todo = [...library.values()]
+      .filter((m) => m.imdbId && m.imdbRating === undefined)
+      .sort((a, b) => b.popularity - a.popularity)
+      .slice(0, OMDB_DAILY);
+    await pool(todo, 6, async (m) => {
+      try {
+        const r = await json<{ imdbRating?: string; imdbVotes?: string; Director?: string; Actors?: string; Response?: string }>(
+          `https://www.omdbapi.com/?apikey=${OMDB_KEY}&i=${m.imdbId}`,
+        );
+        if (r.Response !== 'True') return;
+        const rating = Number(r.imdbRating);
+        m.imdbRating = Number.isFinite(rating) ? rating : 0;
+        m.imdbVotes = Number(String(r.imdbVotes ?? '').replace(/,/g, '')) || undefined;
+        if (!m.director?.length && r.Director && r.Director !== 'N/A') m.director = r.Director.split(', ');
+        if (!m.cast?.length && r.Actors && r.Actors !== 'N/A') m.cast = r.Actors.split(', ');
+        rated++;
+      } catch {
+        // try again tomorrow
+      }
+    });
+  }
+  console.log(OMDB_KEY ? `IMDb ratings fetched: ${rated}` : 'IMDb ratings: skipped (no OMDB_API_KEY secret)');
+
+  // Merge duplicate uploads of the same film, keep the most popular copy.
   const seen = new Map<string, Movie>();
-  for (const m of movies.sort((a, b) => b.popularity - a.popularity)) {
+  for (const m of [...library.values()].filter((x) => isWatchable(x)).sort((a, b) => b.popularity - a.popularity)) {
     const key = titleKey(m.title);
     const prev = seen.get(key);
     if (!prev) seen.set(key, m);
     else if (!prev.year && m.year) prev.year = m.year;
   }
-  const catalog: MovieCatalog = { version: 1, builtAt: Date.now(), movies: [...seen.values()] };
+  const movies = [...seen.values()];
+  const catalog: MovieCatalog = { version: 1, builtAt: now, movies };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'movies.json'), JSON.stringify(catalog));
-  const byGenre: Record<string, number> = {};
-  for (const m of catalog.movies) for (const g of m.genres) byGenre[g] = (byGenre[g] ?? 0) + 1;
-  const byLang: Record<string, number> = {};
-  for (const m of catalog.movies) if (m.language) byLang[m.language] = (byLang[m.language] ?? 0) + 1;
-  console.log(`movies: ${catalog.movies.length}`, byGenre, byLang);
+
+  const tally = (f: (m: Movie) => string[]) => {
+    const t: Record<string, number> = {};
+    for (const m of movies) for (const k of f(m)) t[k] = (t[k] ?? 0) + 1;
+    return t;
+  };
+  const report = [
+    `# Movie library`,
+    ``,
+    `- Films: **${movies.length}** (${added} new tonight)`,
+    `- With cast/director: ${movies.filter((m) => m.cast?.length || m.director?.length).length}`,
+    `- With IMDb id: ${movies.filter((m) => m.imdbId).length} · with IMDb rating: ${movies.filter((m) => m.imdbRating).length}`,
+    `- Genres: ${JSON.stringify(tally((m) => m.genres))}`,
+    `- Languages: ${JSON.stringify(tally((m) => (m.language ? [m.language] : [])))}`,
+  ].join('\n');
+  writeFileSync(join(OUT, 'movies-report.md'), report);
+  console.log(report);
 }
 
 main().catch((e) => {
