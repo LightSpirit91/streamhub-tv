@@ -10,13 +10,18 @@ import { cleanText, cleanTitle, fileUrl, genresFrom, isWatchable, languageOf, po
 // are excluded: they contain modern copyrighted series.
 export const SHOW_COLLECTIONS = ['classic_tv', 'classic_tv_1950s', 'classic_tv_1960s', 'classic_tv_commercials_excluded'];
 
-/** Public-domain TV is old TV. Anything that says it's recent is not ours to show. */
+/**
+ * Public-domain TV only. US TV from 1964 on had its copyright renewed
+ * automatically, so only shows dated 1963 or earlier qualify (some of those
+ * fell into the public domain when nobody renewed them). No date, no entry.
+ */
 export function isClassicShow(title: string, year?: number, description = ''): boolean {
-  if (year && year > 1978) return false;
-  const text = `${title} ${description.slice(0, 300)}`;
-  const recent = /\b(19[89]\d|20[0-2]\d)\b/.exec(text);
-  if (recent && Number(recent[1]) > 1978) return false;
-  if (/complete series|complete season|seasons? \d+\s*-\s*\d+|\bs\d{2}\b.*\b1080p\b/i.test(title)) return false;
+  const text = `${title} ${description.slice(0, 400)}`;
+  if (/complete series|complete season|seasons? \d+\s*-\s*\d+|\b1080p\b|\banime\b|dubbed|مدبلج|انمي|аниме/i.test(text)) return false;
+  const years = [...text.matchAll(/\b(19[2-9]\d|20[0-2]\d)\b/g)].map((m) => Number(m[1]));
+  const known = year ?? (years.length ? Math.min(...years) : undefined);
+  if (!known) return false;
+  if (known > 1963 || years.some((y) => y > 1963)) return false;
   return true;
 }
 

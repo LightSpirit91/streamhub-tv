@@ -9,7 +9,7 @@ import { pushRecent, recordResult } from '../core/health/failover';
 import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL } from '../core/catalog/sources';
 import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
-import { isWatchable } from '../core/movies/archive';
+import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -84,7 +84,8 @@ const MOVIES_KEY = 'movies.v1.json';
 const DAY = 86_400_000;
 
 /** Second line of defense: the same content filter the nightly job uses. */
-const clean = (list: Movie[]) => list.filter((m) => isWatchable({ title: m.title, description: m.description }));
+const clean = (list: Movie[]) =>
+  list.filter((m) => isWatchable({ title: m.title, description: m.description })).map((m) => ({ ...m, title: stripEmoji(m.title) }));
 
 async function loadMovies(force: boolean): Promise<Movie[]> {
   return clean(await loadMoviesRaw(force));
@@ -121,7 +122,9 @@ async function loadShows(force: boolean): Promise<Show[]> {
     }
     const c = JSON.parse(await fetchText(STREAMHUB_SHOWS_URL, globalThis.fetch as never, 30_000)) as ShowCatalog;
     await fileBlobStore.write(KEY, JSON.stringify({ ...c, savedAt: Date.now() }));
-    return c.shows.filter((x) => isWatchable({ title: x.title, description: x.description }));
+    return c.shows
+      .filter((x) => isWatchable({ title: x.title, description: x.description }))
+      .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));
   } catch {
     const raw = await fileBlobStore.read(KEY).catch(() => null);
     return raw ? (JSON.parse(raw) as ShowCatalog).shows : [];

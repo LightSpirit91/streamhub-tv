@@ -12,12 +12,6 @@ permissions:
   pages: write
   id-token: write
 
-# Queue deploys instead of cancelling them, so a quick second push never
-# shows up as a red "cancelled" run in your inbox.
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,7 +24,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx tsc --noEmit
       - run: npx vitest run
+      # Version shown in the app's corner: 1.<build number>, new on every update.
       - run: npx expo export --platform web --output-dir web-dist
+        env:
+          EXPO_PUBLIC_APP_VERSION: 1.${{ github.run_number }}
       - run: cp web-dist/index.html web-dist/404.html
       - uses: actions/configure-pages@v5
         with:
@@ -42,9 +39,21 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Deploys wait their turn (never cancel each other); Pages can be slow when busy.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.second.outputs.page_url || steps.first.outputs.page_url }}
     steps:
-      - id: deployment
+      - id: first
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with:
+          timeout: 1800000
+      - id: second
+        if: steps.first.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000

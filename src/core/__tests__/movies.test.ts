@@ -100,3 +100,11 @@ describe('movie metadata', () => {
     });
   });
 });
+
+describe('titles', () => {
+  it('strips emoji from titles', async () => {
+    const { stripEmoji } = await import('../movies/archive');
+    expect(stripEmoji('כראמל 4 😺🐈')).toBe('כראמל 4');
+    expect(stripEmoji('🏠 לבד בבית 5')).toBe('לבד בבית 5');
+  });
+});

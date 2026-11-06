@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Movie, MovieCatalog } from '../src/core/movies/types';
 import type { Show, ShowCatalog } from '../src/core/shows/types';
-import { genresFrom, isWatchable, cleanText } from '../src/core/movies/archive';
+import { genresFrom, isWatchable, cleanText, stripEmoji } from '../src/core/movies/archive';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -113,7 +113,7 @@ const tooOld = (src: Source, text: string) => {
 
 const thumb = (s: Snip) => s.thumbnails?.maxres?.url ?? s.thumbnails?.standard?.url ?? s.thumbnails?.high?.url ?? s.thumbnails?.medium?.url ?? '';
 const embed = (id: string) => `https://www.youtube-nocookie.com/embed/${id}`;
-const tidy = (t: string) => t.replace(/\s*[|│].*$/, '').replace(/\b(full movie|фильм целиком|полный фильм|סרט מלא|película completa|hd|4k)\b/gi, '').replace(/[\s\-–:()]+$/, '').trim();
+const tidy = (t: string) => stripEmoji(t).replace(/\s*[|│].*$/, '').replace(/\b(full movie|фильм целиком|полный фильм|סרט מלא|película completa|hd|4k)\b/gi, '').replace(/[\s\-–:()]+$/, '').trim();
 
 async function main() {
   if (!KEY) {

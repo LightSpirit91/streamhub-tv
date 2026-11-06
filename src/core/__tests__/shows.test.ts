@@ -22,7 +22,7 @@ describe('classic TV shows', () => {
 
   it('turns a multi-file item into a series with numbered episodes', () => {
     const p = itemToShowParts(
-      { identifier: 'beverly_hillbillies_s1', title: 'The Beverly Hillbillies - Season 1', downloads: 50 },
+      { identifier: 'beverly_hillbillies_s1', title: 'The Beverly Hillbillies - Season 1', year: '1962', downloads: 50 },
       [{ name: 'BH_S01E01.mp4', format: 'h.264' }, { name: 'BH_S01E02.mp4', format: 'h.264' }],
     )!;
     expect(p.show.title).toBe('The Beverly Hillbillies');
@@ -35,6 +35,10 @@ describe('classic TV only', () => {
   it('rejects modern series that slipped into uploads', async () => {
     const { isClassicShow } = await import('../shows/archive');
     expect(isClassicShow('Bonanza', 1959)).toBe(true);
+    expect(isClassicShow('Dragnet - The Big Seventeen (1952)')).toBe(true);
+    expect(isClassicShow('Get Smart', 1965)).toBe(false);
+    expect(isClassicShow('Ironside')).toBe(false);
+    expect(isClassicShow('انمي مدبلج')).toBe(false);
     expect(isClassicShow('Malcolm in the Middle (The Complete Series)')).toBe(false);
     expect(isClassicShow('Final Space Complete Season 1-3 (2018-2021)')).toBe(false);
     expect(isClassicShow('Hazbin Hotel', 2024)).toBe(false);

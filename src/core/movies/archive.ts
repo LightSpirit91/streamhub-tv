@@ -74,6 +74,11 @@ export function genresFrom(subject: unknown, title = ''): string[] {
   return g.length ? g.slice(0, 3) : ['Drama'];
 }
 
+/** Removes emoji and pictographs (YouTube titles often carry them). */
+export function stripEmoji(s: string): string {
+  return s.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 export function cleanText(html: unknown, max = 320): string {
   const s = (Array.isArray(html) ? html.join(' ') : String(html ?? ''))
     .replace(/<[^>]+>/g, ' ')
