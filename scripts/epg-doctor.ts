@@ -21,10 +21,10 @@ const OUT = arg('--out', 'dist');
 const HOURS = Number(arg('--hours', '18'));
 
 const EPGSHARE = 'https://epgshare01.online/epgshare01';
-const SOURCES = [
-  ...['US1', 'US_LOCALS2', 'US_SPORTS1', 'CA1', 'IL1', 'RU1', 'MX1', 'AR1', 'CO1', 'CL1', 'PE1', 'CR1', 'DO1', 'EC1', 'PA1', 'UY1', 'SV1', 'UK1', 'PLEX1', 'DISTROTV1', 'RAKUTEN_EN1', 'viva-russia.ru'].map(
-    (f) => `${EPGSHARE}/epg_ripper_${f}.xml.gz`,
-  ),
+/** Guide files we want, by prefix. Read from the folder listing each night, so renames (US1 -> US2) never break the guide. */
+const WANT = /^epg_ripper_(US\d|US_LOCALS\d|US_SPORTS\d|CA\d|IL\d|RU\d|KZ\d|UA\d|viva-russia\.ru|MX\d|AR\d|CO\d|CL\d|PE\d|CR\d|DO\d|EC\d|PA\d|UY\d|SV\d|UK\d|PLEX\d|DISTROTV\d|RAKUTEN\d|PEACOCK\d|AMCCHANNELS\d|WHALETVPLUS\d|TBNPLUS\d|DIRECTVSPORTS\d|BEIN\d|RALLY_TV\d)\.xml\.gz$/;
+const FALLBACK = ['US2', 'US_LOCALS1', 'US_SPORTS1', 'CA2', 'IL1', 'viva-russia.ru', 'MX1', 'CO1', 'UK1', 'PLEX1'].map((f) => `epg_ripper_${f}.xml.gz`);
+const MJH = [
   'https://i.mjh.nz/PlutoTV/us.xml.gz',
   'https://i.mjh.nz/PlutoTV/ca.xml.gz',
   'https://i.mjh.nz/PlutoTV/mx.xml.gz',
@@ -33,6 +33,20 @@ const SOURCES = [
   'https://i.mjh.nz/Plex/us.xml.gz',
   'https://i.mjh.nz/Roku/all.xml.gz',
 ];
+
+async function guideSources(): Promise<string[]> {
+  let files = FALLBACK;
+  try {
+    const html = await (await fetch(`${EPGSHARE}/`, { headers: { 'User-Agent': 'StreamHub-EPG/1.2' } })).text();
+    const listed = [...html.matchAll(/href="(epg_ripper_[^"]+\.xml\.gz)"/g)].map((m) => m[1]).filter((f) => WANT.test(f));
+    if (listed.length) files = [...new Set(listed)];
+  } catch {
+    // keep the fallback list
+  }
+  // Israel and the big US/Canada guides first; the free-channel guides last.
+  const rank = (f: string) => (/_(IL|US|CA)/.test(f) ? 0 : /_(RU|KZ|UA|viva)/.test(f) ? 1 : 2);
+  return [...files.sort((a, b) => rank(a) - rank(b)).map((f) => `${EPGSHARE}/${f}`), ...MJH];
+}
 
 /**
  * Streams a (gzipped) XMLTV file and keeps only what we need, so guides of
@@ -55,6 +69,16 @@ export async function processSource(
     if (url.endsWith('.gz')) stream = stream.pipe(createGunzip());
     stream.setEncoding?.('utf8');
 
+    // i.mjh.nz guides interleave channels and programmes; they are small, so read them whole.
+    if (url.includes('i.mjh.nz')) {
+      let all = '';
+      for await (const chunk of stream as AsyncIterable<string | Buffer>) all += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      const xmlCh = parseChannels(all);
+      const map = matchChannels(targets, xmlCh);
+      const byXml = new Map<string, Programme[]>();
+      if (map.size) collectProgrammes(all, new Set(map.values()), from, to, byXml);
+      return { map, byXml, xmlChannels: xmlCh.length };
+    }
     let buf = '';
     let channelsXml = '';
     let map: Map<string, string> | null = null;
@@ -119,7 +143,7 @@ async function main() {
   const to = now + HOURS * 3600;
   const log: string[] = [];
 
-  for (const url of SOURCES) {
+  for (const url of await guideSources()) {
     if (!unmatched.size) break;
     const name = url.split('/').slice(-2).join('/');
     const got0 = await processSource(url, [...unmatched.values()], from, to);
