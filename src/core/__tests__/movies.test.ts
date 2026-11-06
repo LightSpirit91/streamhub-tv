@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanText, genresFrom, pickVideoFile, searchUrl, toMovie } from '../movies/archive';
+import { classicBoost, cleanText, cleanTitle, titleKey, genresFrom, isWatchable, pickVideoFile, searchUrl, toMovie } from '../movies/archive';
 
 describe('archive movies', () => {
   const files = [
@@ -33,6 +33,27 @@ describe('archive movies', () => {
     expect(m.poster).toBe('https://archive.org/services/img/night_of_the_living_dead');
     expect(m.year).toBe(1968);
     expect(m.genres).toContain('Horror');
+  });
+
+  it('keeps exploitation, adult and non-film uploads out', () => {
+    expect(isWatchable({ title: 'Sex Madness' })).toBe(false);
+    expect(isWatchable({ title: 'Diary of a Nudist' })).toBe(false);
+    expect(isWatchable({ title: 'Reefer Madness' })).toBe(false);
+    expect(isWatchable({ title: 'Three Stooges Episodes' })).toBe(false);
+    expect(isWatchable({ title: 'His Girl Friday', subject: ['comedy'] })).toBe(true);
+    expect(isWatchable({ title: 'Night of the Living Dead' })).toBe(true);
+  });
+
+  it('cleans messy upload titles so duplicates merge', () => {
+    expect(cleanTitle('ANGEL AND THE BADMAN video quality upgrade')).toBe('Angel and the Badman');
+    expect(cleanTitle("Gulliver's Travels [720p]")).toBe("Gulliver's Travels");
+    expect(cleanTitle('Carnival of Souls (1962)')).toBe('Carnival of Souls');
+    expect(titleKey('The General (complete & clearer) (1926)')).toBe(titleKey('The General'));
+  });
+
+  it('floats well-known classics to the top', () => {
+    expect(classicBoost('His Girl Friday')).toBeGreaterThan(1);
+    expect(classicBoost('Some Unknown Film')).toBe(1);
   });
 
   it('queries the feature film collections', () => {

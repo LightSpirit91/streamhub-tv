@@ -28,7 +28,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx vitest run
       - run: npx tsx scripts/channel-doctor.ts --check --out dist
-      - run: npx tsx scripts/movie-doctor.ts --limit 600 --out dist
+      - run: npx tsx scripts/movie-doctor.ts --limit 900 --out dist
         continue-on-error: true
       - name: Publish to catalog branch
         run: |

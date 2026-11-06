@@ -5,12 +5,12 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { metadataUrl, searchUrl, toMovie, type ArchiveFile, type SearchDoc } from '../src/core/movies/archive';
+import { isWatchable, titleKey, metadataUrl, searchUrl, toMovie, type ArchiveFile, type SearchDoc } from '../src/core/movies/archive';
 import type { Movie, MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
-const LIMIT = Number(arg('--limit', '600'));
+const LIMIT = Number(arg('--limit', '900'));
 const OUT = arg('--out', 'dist');
 const UA = { 'User-Agent': 'StreamHub-MovieDoctor/1.0 (+https://github.com/LightSpirit91/streamhub-tv)' };
 
@@ -37,7 +37,9 @@ async function main() {
     if (!r.response.docs.length) break;
     docs.push(...r.response.docs);
   }
-  console.log(`search: ${docs.length} candidates`);
+  const before = docs.length;
+  docs.splice(0, docs.length, ...docs.filter(isWatchable));
+  console.log(`search: ${before} candidates, ${docs.length} after content filter`);
 
   const movies: Movie[] = [];
   let i = 0;
@@ -59,8 +61,10 @@ async function main() {
   // Dedupe by normalized title + year, keep the most popular copy.
   const seen = new Map<string, Movie>();
   for (const m of movies.sort((a, b) => b.popularity - a.popularity)) {
-    const key = `${m.title.toLowerCase().replace(/[^a-z0-9]/g, '')}:${m.year ?? ''}`;
-    if (!seen.has(key)) seen.set(key, m);
+    const key = titleKey(m.title);
+    const prev = seen.get(key);
+    if (!prev) seen.set(key, m);
+    else if (!prev.year && m.year) prev.year = m.year;
   }
   const catalog: MovieCatalog = { version: 1, builtAt: Date.now(), movies: [...seen.values()] };
   mkdirSync(OUT, { recursive: true });

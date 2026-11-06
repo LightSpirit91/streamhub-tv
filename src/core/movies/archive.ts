@@ -83,6 +83,60 @@ export function cleanText(html: unknown, max = 320): string {
   return s.length > max ? `${s.slice(0, max).replace(/\s\S*$/, '')}...` : s;
 }
 
+/** Titles kept out of the library: exploitation, adult, disturbing or non-film uploads. */
+const BLOCK = /\b(sex|sexual|nudist|nude|nudity|naked|erotic|erotica|stag|burlesque|striptease|molest\w*|rape|incest|adult film|exploitation|reefer|marihuana|marijuana|drug addict\w*|concentration camps?|atrocit\w*|execution|autopsy|snuff)\b/i;
+const NOT_A_FEATURE = /\b(episodes?|trailers?|compilation|festival|collection|reel|newsreel|films|shorts|serial chapter|chapter \d+)\b/i;
+
+/** Well-known classics float to the top of every row and the hero. */
+const CLASSICS = [
+  'his girl friday', 'house on haunted hill', 'night of the living dead', 'charade', 'metropolis', 'nosferatu',
+  'the general', 'the little shop of horrors', 'detour', 'd.o.a.', 'the stranger', 'suddenly', 'plan 9 from outer space',
+  'the kid', 'sherlock jr', 'the gold rush', 'mclintock', 'the lady vanishes', 'the 39 steps', 'carnival of souls',
+  'the last man on earth', 'the hitch-hiker', 'scarlet street', 'the man with the golden arm', 'royal wedding',
+  'my man godfrey', 'nothing sacred', 'angel and the badman', 'the outlaw', 'the brain that wouldn\'t die',
+  'white zombie', 'the phantom of the opera', 'the cabinet of dr. caligari', 'dementia 13', 'a farewell to arms',
+  'gulliver\'s travels', 'jungle book', 'the thief of bagdad', 'sita sings the blues', 'the great flamarion',
+  'beat the devil', 'kansas city confidential', 'the big combo', 'quicksand', 'impact', 'the second woman',
+];
+
+export function isWatchable(doc: { title?: string; subject?: unknown; description?: unknown }): boolean {
+  const title = String(doc.title ?? '');
+  const subject = Array.isArray(doc.subject) ? doc.subject.join(' ') : String(doc.subject ?? '');
+  const desc = Array.isArray(doc.description) ? doc.description.join(' ') : String(doc.description ?? '');
+  if (BLOCK.test(title) || BLOCK.test(subject) || BLOCK.test(desc.slice(0, 600))) return false;
+  if (NOT_A_FEATURE.test(title)) return false;
+  return true;
+}
+
+export function classicBoost(title: string): number {
+  const t = title.toLowerCase();
+  return CLASSICS.some((c) => t === c || t.startsWith(`${c} `) || t.startsWith(`${c}(`)) ? 10 : 1;
+}
+
+/** "ANGEL AND THE BADMAN video quality upgrade" -> "Angel and the Badman". */
+export function cleanTitle(raw: string): string {
+  let t = cleanText(raw, 120)
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\((?:\d{4}|complete[^)]*|restored[^)]*|hd|hq|colou?ri[sz]ed[^)]*|\d+p)\)/gi, '')
+    .replace(/\b(video quality upgrade|high quality|full movie|hd|hq|restored|remastered|\d{3,4}p)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[\s\-:,.]+$/, '')
+    .trim();
+  if (t === t.toUpperCase() && /[A-Z]/.test(t)) {
+    const small = new Set(['a', 'an', 'and', 'the', 'of', 'on', 'in', 'to', 'for', 'at', 'by', 'from']);
+    t = t
+      .toLowerCase()
+      .split(' ')
+      .map((w, i) => (i > 0 && small.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+      .join(' ');
+  }
+  return t;
+}
+
+export function titleKey(title: string): string {
+  return cleanTitle(title).toLowerCase().replace(/^the /, '').replace(/[^a-z0-9]/g, '');
+}
+
 export interface SearchDoc {
   identifier: string;
   title?: string;
@@ -95,11 +149,11 @@ export interface SearchDoc {
 
 export function toMovie(doc: SearchDoc, files: ArchiveFile[]): Movie | null {
   const file = pickVideoFile(files);
-  if (!file || !doc.title) return null;
+  if (!file || !doc.title || !isWatchable(doc)) return null;
   const year = Number(String(doc.year ?? '').slice(0, 4)) || undefined;
   return {
     id: doc.identifier,
-    title: cleanText(doc.title, 90),
+    title: cleanTitle(doc.title),
     year,
     genres: genresFrom(doc.subject, doc.title),
     description: cleanText(doc.description),
@@ -107,6 +161,6 @@ export function toMovie(doc: SearchDoc, files: ArchiveFile[]): Movie | null {
     url: fileUrl(doc.identifier, file.name),
     runtime: doc.runtime || undefined,
     source: 'archive',
-    popularity: doc.downloads ?? 0,
+    popularity: (doc.downloads ?? 0) * classicBoost(cleanTitle(doc.title)),
   };
 }
