@@ -79,12 +79,18 @@ async function pool<T>(items: T[], size: number, fn: (t: T) => Promise<void>) {
 async function main() {
   const now = Date.now();
   const previous: Movie[] = existsSync(PREVIOUS) ? (JSON.parse(readFileSync(PREVIOUS, 'utf8')) as MovieCatalog).movies : [];
+  // A bulk import (hundreds of titles sharing one timestamp) is not "new":
+  // only titles that arrive through the newest-uploads scan count as new.
+  const stamps = new Map<number, number>();
+  for (const m of previous) if (m.addedAt) stamps.set(m.addedAt, (stamps.get(m.addedAt) ?? 0) + 1);
+  for (const m of previous) if (m.addedAt && (stamps.get(m.addedAt) ?? 0) > 300) delete m.addedAt;
   const library = new Map(previous.map((m) => [m.id, m]));
   console.log(`previous library: ${previous.length}`);
 
   const [popular, newest] = await Promise.all([search('downloads desc', LIMIT), search('addeddate desc', 800)]);
   const docs = new Map<string, SearchDoc>();
   for (const d of [...popular, ...newest]) docs.set(d.identifier, d);
+  const newestIds = new Set(newest.map((d) => d.identifier));
   console.log(`search: ${popular.length} popular + ${newest.length} newest = ${docs.size} candidates`);
 
   // Refresh known titles from search data; fetch metadata only for new ones.
@@ -101,7 +107,7 @@ async function main() {
       const md = meta.metadata ?? {};
       const m = toMovie({ ...d, runtime: d.runtime ?? (md.runtime as string | undefined) }, meta.files ?? []);
       if (!m) return;
-      if (previous.length) m.addedAt = now; // the very first build has no "new" titles
+      if (previous.length && newestIds.has(m.id)) m.addedAt = now; // genuinely new uploads only
       m.imdbId = imdbIdFrom(md['external-identifier']) ?? imdbIdFrom(md.imdb);
       m.minutes ??= runtimeMinutes(md.runtime as string | undefined);
       library.set(m.id, m);

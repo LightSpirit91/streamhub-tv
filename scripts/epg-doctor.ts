@@ -8,9 +8,11 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { createGunzip } from 'node:zlib';
+import { Readable } from 'node:stream';
 import type { Catalog } from '../src/core/types';
 import { collectProgrammes, matchChannels, parseChannels, type Guide, type MatchTarget, type Programme } from '../src/core/epg/xmltv';
+// Guide files named per country by epgshare01. Unknown names simply report "unavailable".
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -32,18 +34,63 @@ const SOURCES = [
   'https://i.mjh.nz/Roku/all.xml.gz',
 ];
 
-async function download(url: string): Promise<string | null> {
+/**
+ * Streams a (gzipped) XMLTV file and keeps only what we need, so guides of
+ * any size (the US file is several hundred MB unpacked) never sit in memory.
+ * Channels come first in XMLTV; we match them, then filter programmes as
+ * they stream past.
+ */
+export async function processSource(
+  url: string,
+  targets: MatchTarget[],
+  from: number,
+  to: number,
+): Promise<{ map: Map<string, string>; byXml: Map<string, Programme[]> } | null> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 900_000);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 120_000);
-    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.0' } });
-    clearTimeout(t);
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    const gz = buf[0] === 0x1f && buf[1] === 0x8b;
-    return (gz ? gunzipSync(buf) : buf).toString('utf8');
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.1' } });
+    if (!res.ok || !res.body) return null;
+    let stream: NodeJS.ReadableStream = Readable.fromWeb(res.body as never);
+    if (url.endsWith('.gz')) stream = stream.pipe(createGunzip());
+    stream.setEncoding?.('utf8');
+
+    let buf = '';
+    let channelsXml = '';
+    let map: Map<string, string> | null = null;
+    let wanted = new Set<string>();
+    const byXml = new Map<string, Programme[]>();
+
+    for await (const chunk of stream as AsyncIterable<string | Buffer>) {
+      buf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      if (!map) {
+        const p = buf.indexOf('<programme');
+        if (p === -1) {
+          const cut = buf.lastIndexOf('</channel>');
+          if (cut !== -1) {
+            channelsXml += buf.slice(0, cut + 10);
+            buf = buf.slice(cut + 10);
+          }
+          continue;
+        }
+        channelsXml += buf.slice(0, p);
+        buf = buf.slice(p);
+        map = matchChannels(targets, parseChannels(channelsXml));
+        channelsXml = '';
+        if (!map.size) return { map, byXml };
+        wanted = new Set(map.values());
+      }
+      const cut = buf.lastIndexOf('</programme>');
+      if (cut === -1) continue;
+      collectProgrammes(buf.slice(0, cut + 12), wanted, from, to, byXml);
+      buf = buf.slice(cut + 12);
+    }
+    if (!map) map = matchChannels(targets, parseChannels(channelsXml + buf));
+    return { map, byXml };
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -67,29 +114,22 @@ async function main() {
 
   for (const url of SOURCES) {
     if (!unmatched.size) break;
-    const xml = await download(url);
     const name = url.split('/').slice(-2).join('/');
-    if (!xml) {
+    const got0 = await processSource(url, [...unmatched.values()], from, to);
+    if (!got0) {
       log.push(`- ${name}: unavailable`);
+      console.log(log[log.length - 1]);
       continue;
     }
-    const map = matchChannels([...unmatched.values()], parseChannels(xml));
-    if (!map.size) {
-      log.push(`- ${name}: 0 channels matched`);
-      continue;
-    }
-    const wanted = new Set(map.values());
-    const byXml = new Map<string, Programme[]>();
-    collectProgrammes(xml, wanted, from, to, byXml);
     let got = 0;
-    for (const [appId, xmlId] of map) {
-      const list = (byXml.get(xmlId) ?? []).sort((a, b) => a[0] - b[0]).slice(0, 14);
+    for (const [appId, xmlId] of got0.map) {
+      const list = (got0.byXml.get(xmlId) ?? []).sort((a, b) => a[0] - b[0]).slice(0, 14);
       if (!list.length) continue;
       programs[appId] = list;
       unmatched.delete(appId);
       got++;
     }
-    log.push(`- ${name}: ${got} channels with schedule`);
+    log.push(`- ${name}: ${got0.map.size} matched, ${got} with schedule`);
     console.log(log[log.length - 1]);
   }
 
@@ -102,7 +142,7 @@ async function main() {
   console.log(report);
 }
 
-main().catch((e) => {
+if (process.argv[1]?.endsWith('epg-doctor.ts')) main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
