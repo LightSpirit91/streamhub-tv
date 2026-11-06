@@ -1,67 +1,82 @@
 /**
  * One-off diagnostics run on GitHub (whose network reaches sites this
- * workspace can't): prints status and the start of each URL's response.
+ * workspace can't). Playlists: status and first lines. XMLTV guides:
+ * channels, programmes, and how many days ahead the schedule reaches.
  */
-import { gunzipSync } from 'node:zlib';
+import { Readable } from 'node:stream';
+import { createGunzip } from 'node:zlib';
 
 const URLS = [
-  'https://jfc.org.il/movie-sitemap.xml',
-  'https://jfc.org.il/general_film-sitemap.xml',
-  'https://jfc.org.il/compilation-sitemap.xml',
-
+  'https://i.mjh.nz/PlutoTV/us.m3u8',
+  'https://i.mjh.nz/PlutoTV/all.m3u8',
+  'https://i.mjh.nz/Roku/all.m3u8',
+  'https://i.mjh.nz/PlutoTV/us.xml.gz',
+  'https://i.mjh.nz/Roku/all.xml.gz',
+  'https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz',
+  'https://epgshare01.online/epgshare01/epg_ripper_CA2.xml.gz',
+  'https://epgshare01.online/epgshare01/epg_ripper_IL1.xml.gz',
+  'https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz',
+  'https://epg.pw/xmltv/epg_US.xml.gz',
+  'https://epg.pw/xmltv/epg_CA.xml.gz',
+  'https://epg.pw/xmltv/epg_IL.xml.gz',
+  'https://epg.pw/xmltv/epg_RU.xml.gz',
+  'https://www.open-epg.com/files/unitedstates1.xml.gz',
+  'https://www.open-epg.com/files/canada1.xml.gz',
+  'https://www.open-epg.com/files/israel1.xml.gz',
+  'https://www.open-epg.com/files/russia1.xml.gz',
 ];
+
+const t = (s: string) => {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\s*([+-]\d{4})?/.exec(s);
+  if (!m) return NaN;
+  const off = m[7] ? (Number(m[7].slice(0, 3)) * 60 + Math.sign(Number(m[7].slice(0, 3)) || 1) * Number(m[7].slice(3))) * 60 : 0;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - off;
+};
+
+async function guide(url: string) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 240_000);
+  const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.2' } });
+  console.log(`status ${res.status} · type ${res.headers.get('content-type')} · length ${res.headers.get('content-length')}`);
+  if (!res.ok || !res.body) return;
+  let s: NodeJS.ReadableStream = Readable.fromWeb(res.body as never);
+  if (url.endsWith('.gz')) s = s.pipe(createGunzip());
+  const now = Date.now() / 1000;
+  let channels = 0, programmes = 0, maxStop = 0, buf = '';
+  const perChannelMax = new Map<string, number>();
+  for await (const c of s as AsyncIterable<Buffer>) {
+    buf += c.toString('utf8');
+    channels += (buf.match(/<channel /g) ?? []).length;
+    for (const m of buf.matchAll(/<programme[^>]*start="([^"]+)"[^>]*stop="([^"]+)"[^>]*channel="([^"]+)"|<programme[^>]*channel="([^"]+)"[^>]*start="([^"]+)"[^>]*stop="([^"]+)"/g)) {
+      const stop = t(m[2] ?? m[6]);
+      const ch = m[3] ?? m[4];
+      programmes++;
+      if (stop > maxStop) maxStop = stop;
+      if (stop > (perChannelMax.get(ch) ?? 0)) perChannelMax.set(ch, stop);
+    }
+    const cut = buf.lastIndexOf('>');
+    buf = buf.slice(cut + 1);
+  }
+  clearTimeout(timer);
+  const reach = [...perChannelMax.values()].map((x) => (x - now) / 86400);
+  const n = (d: number) => reach.filter((r) => r >= d).length;
+  console.log(`channels ${channels} · programmes ${programmes} · furthest ${((maxStop - now) / 86400).toFixed(1)} days`);
+  console.log(`channels reaching: 1d ${n(1)} · 2d ${n(2)} · 3d ${n(3)} · 5d ${n(5)} · 7d ${n(7)} (of ${perChannelMax.size})`);
+}
 
 async function main() {
   for (const url of URLS) {
+    console.log(`\n===== ${url}`);
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 StreamHub-Probe/1.0' } });
-      const buf = Buffer.from(await res.arrayBuffer());
-      const text = (buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf) : buf).toString('utf8');
-      console.log(`\n===== ${url}\nstatus ${res.status} · ${buf.length} bytes · type ${res.headers.get('content-type')}`);
-      if (url.endsWith('-sitemap.xml')) {
-        const locs = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-        console.log(`${locs.length} urls; first: ${locs.slice(0, 4).join(' ')}`);
-        // Inspect two film pages in detail.
-        for (const page of locs.slice(1, 3)) {
-          const h = await (await fetch(page, { headers: { 'User-Agent': 'Mozilla/5.0 StreamHub-Probe/1.0' } })).text();
-          const pick = (re: RegExp) => re.exec(h)?.[1]?.slice(0, 200);
-          console.log(`\n  --- ${page}`);
-          console.log('  og:title', pick(/property="og:title" content="([^"]+)"/));
-          console.log('  og:image', pick(/property="og:image" content="([^"]+)"/));
-          console.log('  description', pick(/name="description" content="([^"]+)"/));
-          const free = h.match(/(בחינם|חינם|free|לרכישה|בתשלום|price|₪|ש"ח|add-to-cart|woocommerce-Price)[^<]{0,60}/gi)?.slice(0, 8);
-          console.log('  price/free hints', free);
-          const players = [...new Set([...h.matchAll(/(player\.vimeo\.com\/video\/\d+[^"' ]*|vimeo\.com\/\d+|youtube(?:-nocookie)?\.com\/embed\/[\w-]+|[\w./:-]+\.m3u8[^"' ]*|[\w./:-]+\.mp4|kaltura[\w./:-]*|jwplayer[\w./:-]*|<iframe[^>]+src="[^"]+")/gi)].map((m) => m[1]))].slice(0, 10);
-          console.log('  players', players);
-          const ld = /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/.exec(h)?.[1];
-          if (ld) console.log('  ld+json', ld.slice(0, 600).replace(/\s+/g, ' '));
-          const yr = h.match(/(שנת הפקה|שנה|Year)[^0-9]{0,40}(19\d\d|20\d\d)/);
-          console.log('  year hint', yr?.[2]);
-        }
-      } else if (url.endsWith('/epgshare01/')) {
-        const files = [...text.matchAll(/href="(epg_ripper_[^"]+)"/g)].map((m) => m[1]);
-        console.log(files.join('\n'));
-      } else if (url.includes('wp-json/wp/v2/types')) {
-        try {
-          const j = JSON.parse(text) as Record<string, { rest_base?: string; name?: string }>;
-          for (const [k, v] of Object.entries(j)) console.log(`${k} -> /wp-json/wp/v2/${v.rest_base} (${v.name})`);
-        } catch {
-          console.log(text.slice(0, 1500));
-        }
-      } else if (url.endsWith('/wp-json/')) {
-        try {
-          const j = JSON.parse(text) as { routes?: Record<string, unknown> };
-          console.log(Object.keys(j.routes ?? {}).filter((r) => !/oembed|users|settings|block|template|menu|widget|sidebar|plugin|theme|font|navigation|global|pattern|search|comment|media/.test(r)).join('\n'));
-        } catch {
-          console.log(text.slice(0, 1500));
-        }
-      } else {
-        console.log(text.slice(0, 2500).replace(/\s+/g, ' '));
-        const players = [...new Set([...text.matchAll(/(vimeo\.com\/[^"' ]+|youtube(?:-nocookie)?\.com\/embed\/[^"' ]+|kaltura[^"' ]+|\.m3u8[^"' ]*|jwplayer[^"' ]*|vod[^"' ]+\.mp4)/gi)].map((m) => m[1]))].slice(0, 15);
-        if (players.length) console.log('PLAYER HINTS:', players.join(' | '));
+      if (/\.xml(\.gz)?$/.test(url)) await guide(url);
+      else {
+        const res = await fetch(url, { headers: { 'User-Agent': 'StreamHub/1.0' } });
+        const text = await res.text();
+        console.log(`status ${res.status} · ${text.length} chars · ${(text.match(/#EXTINF/g) ?? []).length} entries`);
+        console.log(text.slice(0, 600));
       }
     } catch (e) {
-      console.log(`\n===== ${url}\nFAILED ${(e as Error).message}`);
+      console.log(`FAILED ${(e as Error).message} ${(e as Error & { cause?: { code?: string } }).cause?.code ?? ''}`);
     }
   }
 }
