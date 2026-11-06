@@ -86,7 +86,8 @@ async function main() {
   const stamps = new Map<number, number>();
   for (const m of previous) if (m.addedAt) stamps.set(m.addedAt, (stamps.get(m.addedAt) ?? 0) + 1);
   for (const m of previous) if (m.addedAt && (stamps.get(m.addedAt) ?? 0) > 300) delete m.addedAt;
-  const library = new Map(previous.map((m) => [m.id, m]));
+  // Nothing from YouTube is kept.
+  const library = new Map(previous.filter((m) => m.source !== 'youtube').map((m) => [m.id, m]));
   console.log(`previous library: ${previous.length}`);
 
   const [popular, newest] = await Promise.all([search('downloads desc', LIMIT), search('addeddate desc', 800)]);

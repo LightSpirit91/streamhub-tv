@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Expand, Heart, Volume2, VolumeX } from 'lucide-react-native';
+import { CalendarDays, Expand, Heart, Volume2, VolumeX } from 'lucide-react-native';
+import { overlayOpen, useUi } from '../state/ui';
 import type { Channel, HubId } from '../core/types';
 import { HUBS, HUB_BY_ID } from '../core/catalog/hubs';
 import { useStreamHub } from '../state/useStreamHub';
@@ -80,6 +81,7 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
+      if (overlayOpen()) return; // the schedule sheet owns the keys
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -143,6 +145,11 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
               label="Watch fullscreen"
               icon={<Expand size={16} color="#17110A" />}
               onPress={() => onFullscreen(current, list)}
+            />
+            <Button
+              label="Full schedule"
+              icon={<CalendarDays size={16} color={colors.text} />}
+              onPress={() => useUi.getState().openSchedule(current)}
             />
           </View>
         </View>

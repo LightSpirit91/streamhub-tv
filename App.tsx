@@ -28,6 +28,8 @@ import { initCast, useCast } from './src/player/cast/useCast';
 import { NowOnTvBar } from './src/components/CastControls';
 import { APP_VERSION } from './src/version';
 import { ReminderBanner } from './src/components/ReminderBanner';
+import { WeekGuide } from './src/components/WeekGuide';
+import { useUi } from './src/state/ui';
 
 export default function App() {
   const [fontsReady] = useFonts({
@@ -45,6 +47,9 @@ export default function App() {
   const [detail, setDetail] = useState<Movie | null>(null);
   const [showDetail, setShowDetail] = useState<Show | null>(null);
   const [upcomingDetail, setUpcomingDetail] = useState<UpcomingMovie | null>(null);
+  const schedule = useUi((s) => s.schedule);
+  const closeSchedule = useUi((s) => s.closeSchedule);
+  const allChannels = useStreamHub((s) => s.channels);
   // Chromecast: remember what's on the TV so the bar can reopen its remote.
   const castDevice = useCast().device;
   const [castItem, setCastItem] = useState<PlayItem | null>(null);
@@ -152,10 +157,6 @@ export default function App() {
       {upcomingDetail && (
         <UpcomingDetail
           movie={upcomingDetail}
-          onTrailer={(url, title) => {
-            setUpcomingDetail(null);
-            playMovie({ id: `trailer:${upcomingDetail.id}`, title: `${title} · Trailer`, genres: ['Trailer'], description: '', poster: upcomingDetail.posterHi ?? '', url, source: 'youtube', popularity: 0 }, true);
-          }}
           onClose={() => setUpcomingDetail(null)}
         />
       )}
@@ -163,13 +164,20 @@ export default function App() {
         <ShowDetail
           show={showDetail}
           onPlay={playEpisode}
-          onTrailer={(url, title) =>
-            playMovie({ id: `trailer:${showDetail.id}`, title: `${title} · Trailer`, genres: ['Trailer'], description: '', poster: showDetail.poster, url, source: 'youtube', popularity: 0 }, true)
-          }
           onClose={() => setShowDetail(null)}
         />
       )}
       {playing && <PlayerScreen item={playing} onChange={setPlaying} onClose={() => setPlaying(null)} />}
+      {schedule && (
+        <WeekGuide
+          channel={schedule}
+          onClose={closeSchedule}
+          onWatch={(c) => {
+            closeSchedule();
+            playChannel(c, allChannels.filter((x) => x.hubs.some((h) => c.hubs.includes(h))));
+          }}
+        />
+      )}
     </View>
   );
 }

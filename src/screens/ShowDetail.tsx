@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, Film, Play, Plus, X } from 'lucide-react-native';
+import { Check, Play, Plus, X } from 'lucide-react-native';
 import { CastRow, FreeOnButtons, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
 import type { Show } from '../core/shows/types';
 import { useStreamHub } from '../state/useStreamHub';
@@ -13,11 +13,10 @@ import { useLayout } from '../ui/layout';
 interface Props {
   show: Show;
   onPlay(s: Show, index: number): void;
-  onTrailer?(url: string, title: string): void;
   onClose(): void;
 }
 
-export function ShowDetail({ show, onPlay, onTrailer, onClose }: Props) {
+export function ShowDetail({ show, onPlay, onClose }: Props) {
   const L = useLayout();
   const progress = useStreamHub((s) => s.movieProgress);
   const inList = useStreamHub((s) => s.movieList.includes(show.id));
@@ -60,9 +59,6 @@ export function ShowDetail({ show, onPlay, onTrailer, onClose }: Props) {
                   onPress={() => onPlay(show, Math.max(0, resume))}
                   preferredFocus
                 /> : null}
-                {show.trailer && onTrailer ? (
-                  <Button label="Trailer" icon={<Film size={16} color={colors.text} />} onPress={() => onTrailer(show.trailer!, show.title)} />
-                ) : null}
                 <Button
                   label={inList ? 'In My List' : 'My List'}
                   icon={inList ? <Check size={18} color={colors.text} /> : <Plus size={18} color={colors.text} />}

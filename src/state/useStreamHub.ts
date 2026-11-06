@@ -11,7 +11,7 @@ import type { UpcomingMovie } from '../core/movies/upcoming';
 import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
-import { genresFromTmdb, isFilmTitle, tidyTitle } from '../core/movies/youtube';
+import { genresFromTmdb } from '../core/movies/youtube';
 import { detectDevice } from '../services/device';
 import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
 
@@ -91,10 +91,11 @@ const DAY = 86_400_000;
 /** Second line of defense: the same content filter the nightly job uses. */
 const clean = (list: Movie[]) =>
   list
-    .filter((m) => isWatchable({ title: m.title, description: m.description }) && (m.source !== 'youtube' || isFilmTitle(m.title)))
+    // Nothing from YouTube is offered.
+    .filter((m) => m.source !== 'youtube' && isWatchable({ title: m.title, description: m.description }))
     .map((m) => ({
       ...m,
-      title: m.source === 'youtube' ? tidyTitle(stripEmoji(m.title)) : stripEmoji(m.title),
+      title: stripEmoji(m.title),
       genres: genresFromTmdb(m.tmdbGenres) ?? m.genres,
     }));
 
@@ -121,6 +122,12 @@ async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
   }
 }
 
+/** Nothing from YouTube is offered. */
+const cleanShows = (list: Show[]) =>
+  list
+    .filter((x) => x.source !== 'youtube' && isWatchable({ title: x.title, description: x.description }))
+    .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));
+
 async function loadShows(force: boolean): Promise<Show[]> {
   const KEY = 'shows.v1.json';
   try {
@@ -128,17 +135,15 @@ async function loadShows(force: boolean): Promise<Show[]> {
       const raw = await fileBlobStore.read(KEY);
       if (raw) {
         const c = JSON.parse(raw) as ShowCatalog & { savedAt: number };
-        if (Date.now() - c.savedAt < DAY) return c.shows;
+        if (Date.now() - c.savedAt < DAY) return cleanShows(c.shows);
       }
     }
     const c = JSON.parse(await fetchText(STREAMHUB_SHOWS_URL, globalThis.fetch as never, 30_000)) as ShowCatalog;
     await fileBlobStore.write(KEY, JSON.stringify({ ...c, savedAt: Date.now() }));
-    return c.shows
-      .filter((x) => isWatchable({ title: x.title, description: x.description }))
-      .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));
+    return cleanShows(c.shows);
   } catch {
     const raw = await fileBlobStore.read(KEY).catch(() => null);
-    return raw ? (JSON.parse(raw) as ShowCatalog).shows : [];
+    return raw ? cleanShows((JSON.parse(raw) as ShowCatalog).shows) : [];
   }
 }
 

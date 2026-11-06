@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CalendarDays, Film, X } from 'lucide-react-native';
+import { CalendarDays, X } from 'lucide-react-native';
 import type { UpcomingMovie } from '../core/movies/upcoming';
 import { releaseLabel } from '../core/movies/upcoming';
 import { Button, useFocusRing } from '../ui/primitives';
@@ -26,7 +26,7 @@ export function UpcomingCard({ movie, width, onPress }: { movie: UpcomingMovie; 
   );
 }
 
-export function UpcomingDetail({ movie, onTrailer, onClose }: { movie: UpcomingMovie; onTrailer(url: string, title: string): void; onClose(): void }) {
+export function UpcomingDetail({ movie, onClose }: { movie: UpcomingMovie; onClose(): void }) {
   const L = useLayout();
   const date = new Date(`${movie.releaseDate}T12:00:00`).toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   return (
@@ -46,11 +46,6 @@ export function UpcomingDetail({ movie, onTrailer, onClose }: { movie: UpcomingM
               <Text style={styles.whenText}>Releases {date}</Text>
             </View>
             <Text style={styles.metaLine}>{movie.genres.join(' · ')}</Text>
-            {movie.trailer ? (
-              <View style={{ flexDirection: 'row' }}>
-                <Button variant="primary" label="Watch trailer" icon={<Film size={16} color="#17110A" />} onPress={() => onTrailer(movie.trailer!, movie.title)} preferredFocus />
-              </View>
-            ) : null}
             {movie.overview ? <Text style={styles.desc}>{movie.overview}</Text> : null}
             <CastRow cast={movie.castPhotos} />
             <Text style={styles.note}>

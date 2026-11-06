@@ -287,7 +287,7 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
         <Row key={d} title={`The ${d}s`} subtitle={`${list.length}`} data={list.slice(0, 30)} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => setFilter({ kind: 'decade', value: d })} />
       ))}
       <Text style={[styles.note, { marginHorizontal: L.gutter }]}>
-        {movies.length.toLocaleString()} films. The newest movies streaming free in Canada (they open on Tubi, Pluto TV and others), films from official studio channels, and public-domain classics. New releases are added every night.
+        {movies.length.toLocaleString()} films. The newest movies streaming free in Canada (they open on Tubi, Pluto TV and others) and public-domain classics. New releases are added every night.
       </Text>
     </ScrollView>
   );

@@ -1,7 +1,7 @@
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, ExternalLink, Film, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
+import { Check, ExternalLink, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
 import { CastRow, FreeOnButtons, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
 import type { Movie } from '../core/movies/types';
 import { useStreamHub } from '../state/useStreamHub';
@@ -13,12 +13,6 @@ interface Props {
   movie: Movie;
   onPlay(m: Movie, fromStart?: boolean): void;
   onClose(): void;
-}
-
-/** A trailer plays through the movie player as a tiny pseudo-movie. */
-export function trailerOf(m: { id: string; title: string; trailer?: string; poster: string }): Movie | null {
-  if (!m.trailer) return null;
-  return { id: `trailer:${m.id}`, title: `${m.title} · Trailer`, genres: ['Trailer'], description: '', poster: m.poster, url: m.trailer, source: 'youtube', popularity: 0 };
 }
 
 const fmtMin = (m?: number) => (m ? `${Math.floor(m / 60) ? `${Math.floor(m / 60)}h ` : ''}${m % 60}m` : undefined);
@@ -83,9 +77,6 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
               {resumeAt > 60 && movie.source !== 'free' ? (
                 <Button label="Start over" icon={<RotateCcw size={16} color={colors.text} />} onPress={() => onPlay(movie, true)} />
               ) : null}
-              {trailerOf(movie) ? (
-                <Button label="Trailer" icon={<Film size={16} color={colors.text} />} onPress={() => onPlay(trailerOf(movie)!, true)} />
-              ) : null}
               <Button
                 label={inList ? 'In My Movies' : 'My Movies'}
                 icon={inList ? <Check size={18} color={colors.text} /> : <Plus size={18} color={colors.text} />}
@@ -133,7 +124,7 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
             <Text style={styles.source}>
               {movie.source === 'free'
                 ? `Streams free${movie.freeOn?.some((l) => l.type === 'ads') ? ' with ads' : ''} in Canada; opens on ${movie.freeOn?.map((l) => l.name).join(' / ') ?? 'the service'}.`
-                : movie.source === 'youtube' ? 'Free from the official channel on YouTube.' : 'Free from the Internet Archive.'}{movie.source !== 'free' ? ' Credits from Wikidata' : ''}{movie.imdbRating ? `${movie.source === 'free' ? ' Rating' : ', rating'} from IMDb` : ''}.
+                : 'Free from the Internet Archive.'}{movie.source !== 'free' ? ' Credits from Wikidata' : ''}{movie.imdbRating ? `${movie.source === 'free' ? ' Rating' : ', rating'} from IMDb` : ''}.
             </Text>
             {movie.tmdbId ? <TmdbCredit /> : null}
           </View>

@@ -155,3 +155,47 @@ export function nowNext(list: Programme[] | undefined, nowSec: number): { now?: 
   if (i === -1) return { next: list.filter((p) => p[0] > nowSec) };
   return { now: list[i], next: list.slice(i + 1) };
 }
+
+/**
+ * The week-long guide is split into small files so the app downloads only
+ * the one that holds the channel you open.
+ */
+export const WEEK_BUCKETS = 64;
+export function weekBucket(channelId: string): number {
+  let h = 5381;
+  for (let i = 0; i < channelId.length; i++) h = ((h << 5) + h + channelId.charCodeAt(i)) >>> 0;
+  return h % WEEK_BUCKETS;
+}
+
+export interface GuideDay {
+  /** Local midnight, seconds */
+  start: number;
+  label: string;
+  items: Programme[];
+}
+
+/**
+ * Splits a channel's schedule into local calendar days from today on.
+ * A show crossing midnight appears on both days.
+ */
+export function splitDays(list: Programme[] | undefined, nowSec: number, maxDays = 8): GuideDay[] {
+  if (!list?.length) return [];
+  const midnight = (sec: number) => {
+    const d = new Date(sec * 1000);
+    d.setHours(0, 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+  };
+  const today = midnight(nowSec);
+  const last = list[list.length - 1][1];
+  const days: GuideDay[] = [];
+  for (let i = 0, start = today; i < maxDays && start < last; i++) {
+    const d = new Date(start * 1000);
+    d.setDate(d.getDate() + 1);
+    const end = Math.floor(d.getTime() / 1000); // DST-safe next midnight
+    const items = list.filter((p) => p[1] > start && p[0] < end);
+    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(start * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    if (items.length) days.push({ start, label, items });
+    start = end;
+  }
+  return days;
+}

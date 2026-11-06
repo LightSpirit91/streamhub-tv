@@ -1,6 +1,9 @@
 /**
- * Builds dist/epg.json: what's on now and next for every channel we can match.
- * Usage: npx tsx scripts/epg-doctor.ts [--catalog dist/catalog.json] [--out dist] [--hours 18]
+ * Builds the TV guide for every channel we can match:
+ * - dist/epg.json: now and the next hours (small, loaded when the app opens)
+ * - dist/epg-week/<n>.json: everything published for the coming days, up to
+ *   a week, split in small files (the app loads one when you open a channel's schedule)
+ * Usage: npx tsx scripts/epg-doctor.ts [--catalog dist/catalog.json] [--out dist] [--hours 18] [--days 8]
  *
  * Guide sources (public XMLTV):
  * - epgshare01.online: per-country guides (US, Canada, Israel, Mexico, Latin America, sports...)
@@ -8,10 +11,11 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import { Readable } from 'node:stream';
 import type { Catalog } from '../src/core/types';
-import { collectProgrammes, matchChannels, parseChannels, type Guide, type MatchTarget, type Programme } from '../src/core/epg/xmltv';
+import { collectProgrammes, matchChannels, parseChannels, weekBucket, WEEK_BUCKETS, type Guide, type MatchTarget, type Programme } from '../src/core/epg/xmltv';
 // Guide files named per country by epgshare01. Unknown names simply report "unavailable".
 
 const args = process.argv.slice(2);
@@ -19,6 +23,7 @@ const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) +
 const CATALOG = arg('--catalog', 'dist/catalog.json');
 const OUT = arg('--out', 'dist');
 const HOURS = Number(arg('--hours', '18'));
+const DAYS = Number(arg('--days', '8'));
 
 const EPGSHARE = 'https://epgshare01.online/epgshare01';
 /** Guide files we want, by prefix. Read from the folder listing each night, so renames (US1 -> US2) never break the guide. */
@@ -122,6 +127,13 @@ export async function processSource(
   }
 }
 
+/** Some guides list the same slot twice; keep the first. */
+function dedupe(list: Programme[]): Programme[] {
+  const out: Programme[] = [];
+  for (const p of list) if (!out.length || p[0] >= out[out.length - 1][1] || p[0] !== out[out.length - 1][0]) out.push(p);
+  return out;
+}
+
 async function main() {
   const catalog: Catalog = existsSync(CATALOG)
     ? JSON.parse(readFileSync(CATALOG, 'utf8'))
@@ -137,7 +149,9 @@ async function main() {
   const programs: Record<string, Programme[]> = {};
   const now = Math.floor(Date.now() / 1000);
   const from = now - 3 * 3600;
-  const to = now + HOURS * 3600;
+  const to = now + DAYS * 86400;
+  const soon = now + HOURS * 3600;
+  const week: Record<string, Programme[]> = {};
   const log: string[] = [];
 
   for (const url of await guideSources()) {
@@ -151,9 +165,11 @@ async function main() {
     }
     let got = 0;
     for (const [appId, xmlId] of got0.map) {
-      const list = (got0.byXml.get(xmlId) ?? []).sort((a, b) => a[0] - b[0]).slice(0, 14);
-      if (!list.length) continue;
-      programs[appId] = list;
+      const all = dedupe((got0.byXml.get(xmlId) ?? []).sort((a, b) => a[0] - b[0]));
+      if (!all.length) continue;
+      week[appId] = all;
+      const list = all.filter((p) => p[0] < soon).slice(0, 14);
+      if (list.length) programs[appId] = list;
       unmatched.delete(appId);
       got++;
     }
@@ -161,11 +177,26 @@ async function main() {
     console.log(log[log.length - 1]);
   }
 
-  const guide: Guide = { version: 1, builtAt: Date.now(), programs };
+  const builtAt = Date.now();
+  const guide: Guide = { version: 1, builtAt, programs };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'epg.json'), JSON.stringify(guide));
-  const covered = Object.keys(programs).length;
-  const report = [`# TV guide`, ``, `${covered} of ${catalog.channels.length} channels have a schedule.`, ``, ...log].join('\n');
+  // Week-long schedule in WEEK_BUCKETS files.
+  const weekDir = join(OUT, 'epg-week');
+  rmSync(weekDir, { recursive: true, force: true });
+  mkdirSync(weekDir, { recursive: true });
+  const buckets: Record<string, Programme[]>[] = Array.from({ length: WEEK_BUCKETS }, () => ({}));
+  for (const [id, list] of Object.entries(week)) buckets[weekBucket(id)][id] = list;
+  buckets.forEach((b, i) => writeFileSync(join(weekDir, `${i}.json`), JSON.stringify({ version: 1, builtAt, programs: b } satisfies Guide)));
+  const covered = Object.keys(week).length;
+  const reach = Object.values(week).map((l) => (l[l.length - 1][1] - now) / 86400);
+  const days = (min: number) => reach.filter((d) => d >= min).length;
+  const report = [
+    `# TV guide`, ``,
+    `${covered} of ${catalog.channels.length} channels have a schedule.`,
+    `Schedule reaches: 1+ day ahead ${days(1)} · 3+ days ${days(3)} · 6+ days ${days(6)} channels.`,
+    ``, ...log,
+  ].join('\n');
   writeFileSync(join(OUT, 'epg-report.md'), report);
   console.log(report);
 }

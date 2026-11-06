@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import {
-  Airplay, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
+  Airplay, CalendarDays, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
   RectangleHorizontal, RotateCcw, RotateCw, Volume2, VolumeX,
 } from 'lucide-react-native';
 import type { Channel, Stream } from '../core/types';
@@ -11,6 +11,7 @@ import type { Show } from '../core/shows/types';
 import { FailoverController, zap, type FailoverState } from '../core/health/failover';
 import { useStreamHub } from '../state/useStreamHub';
 import { useRemote } from '../tv/useRemote';
+import { overlayOpen, useUi } from '../state/ui';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
 import StreamVideo from './MediaView';
@@ -247,6 +248,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
+      if (overlayOpen()) return; // the schedule sheet owns the keys
       const k = e.key;
       if (k === 'Escape' || k === 'Backspace') onClose();
       else if (live && (k === 'ArrowUp' || k === 'PageUp')) go(-1);
@@ -271,6 +273,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   }, [go, onClose, showChrome, seekBy, live, casting, cast.volume]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRemote((t) => {
+    if (overlayOpen()) return;
     if (live && !chrome && (t === 'up' || t === 'down')) go(t === 'up' ? -1 : 1);
     else if (!live && !chrome && (t === 'left' || t === 'right')) seekBy(t === 'right' ? 10 : -10);
     else if (t === 'playPause') doPlayPause();
@@ -395,6 +398,11 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
             {Platform.OS === 'ios' ? <AirPlayNative /> : null}
             {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
               <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
+            ) : null}
+            {live && channel ? (
+              <IconBtn onPress={() => useUi.getState().openSchedule(channel)} label="Full schedule">
+                <CalendarDays size={22} color={ic} />
+              </IconBtn>
             ) : null}
             <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(item.kind === 'episode' ? item.show.id : id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
               <Heart size={22} color={saved ? colors.gold : ic} fill={saved ? colors.gold : 'transparent'} />

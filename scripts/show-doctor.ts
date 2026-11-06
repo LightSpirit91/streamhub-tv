@@ -120,12 +120,12 @@ async function main() {
   }
   console.log(OMDB_KEY ? `series ratings looked up: ${rated}` : 'series ratings: skipped (no OMDB_API_KEY secret)');
 
-  // Keep YouTube shows from the previous build; youtube-doctor refreshes them.
-  const yt = (prev?.shows ?? []).filter((s) => s.source === 'youtube' || s.source === 'free');
+  // Keep free-to-stream series (fresh-doctor maintains them). Nothing from YouTube is kept.
+  const yt = (prev?.shows ?? []).filter((s) => s.source === 'free');
   const catalog: ShowCatalog = { version: 1, builtAt: now, shows: [...list, ...yt] };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'shows.json'), JSON.stringify(catalog));
-  const report = `# TV shows\n\n- Series: **${catalog.shows.length}** (${list.length} classic, ${yt.length} from official channels)\n- Episodes: ${catalog.shows.reduce((n, s) => n + s.episodes.length, 0)} (${addedEps} added tonight)\n- Top: ${list.slice(0, 15).map((s) => `${s.title} (${s.episodes.length})`).join(', ')}`;
+  const report = `# TV shows\n\n- Series: **${catalog.shows.length}** (${list.length} classic, ${yt.length} free to stream)\n- Episodes: ${catalog.shows.reduce((n, s) => n + s.episodes.length, 0)} (${addedEps} added tonight)\n- Top: ${list.slice(0, 15).map((s) => `${s.title} (${s.episodes.length})`).join(', ')}`;
   writeFileSync(join(OUT, 'shows-report.md'), report);
   console.log(report);
 }

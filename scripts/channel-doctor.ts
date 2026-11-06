@@ -133,7 +133,6 @@ async function main() {
     tally = await checkAll(catalog.channels);
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
     // Remember what went offline; revive what came back.
-    // Live cams are refreshed nightly by youtube-doctor; they never count as 'died'.
     // Channels removed on purpose (YouTube, Samsung TV Plus, Plex) are not 'offline'; they are not remembered.
     const before = (readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? []).filter((c) => !c.id.startsWith('ytlive:') && !c.streams.every((s) => isBannedStream(s)));
     const g = updateGraveyard(readJson<Graveyard>(`${PREV}/graveyard.json`), before, listed, catalog.channels);

@@ -351,3 +351,23 @@ describe('lineups merge by name', () => {
     expect(c.channels.filter((x) => x.name === 'Channel 9')).toHaveLength(2); // Israel's and the US lineup's stay separate
   });
 });
+
+describe('week guide', () => {
+  it('splits a schedule into days from today and buckets channels stably', async () => {
+    const { splitDays, weekBucket, WEEK_BUCKETS } = await import('../epg/xmltv');
+    const base = new Date(2026, 10, 6, 0, 0, 0).getTime() / 1000; // local midnight
+    const now = base + 15 * 3600; // 3 PM
+    const list: [number, number, string][] = [];
+    for (let t = base; t < base + 3 * 86400; t += 7200) list.push([t, t + 7200, `Show ${t}`]);
+    list.push([base + 3 * 86400 - 3600, base + 3 * 86400 + 3600, 'Late movie']); // crosses midnight
+    const days = splitDays(list, now);
+    expect(days.map((d) => d.label).slice(0, 2)).toEqual(['Today', 'Tomorrow']);
+    expect(days).toHaveLength(4);
+    expect(days[0].items[0][2]).toBe(`Show ${base}`);
+    expect(days[2].items.at(-1)![2]).toBe('Late movie');
+    expect(days[3].items[0][2]).toBe('Late movie');
+    expect(weekBucket('kan11.il')).toBe(weekBucket('kan11.il'));
+    expect(weekBucket('kan11.il')).toBeLessThan(WEEK_BUCKETS);
+    expect(splitDays(undefined, now)).toEqual([]);
+  });
+});

@@ -24,6 +24,9 @@ export const STREAMHUB_UPCOMING_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/upcoming.json';
 export const STREAMHUB_EPG_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg.json';
+/** Week-long schedule, split in small files (see weekBucket). */
+export const streamhubEpgWeekUrl = (bucket: number) =>
+  `https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg-week/${bucket}.json`;
 
 export interface PlaylistSource {
   id: string;
