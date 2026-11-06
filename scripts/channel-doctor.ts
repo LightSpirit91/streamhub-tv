@@ -18,6 +18,7 @@ import { SOURCES } from '../src/core/catalog/sources';
 import { finalizeChannel } from '../src/core/catalog/buildCatalog';
 import { HUBS } from '../src/core/catalog/hubs';
 import type { Channel, Stream } from '../src/core/types';
+import { channelsCsv, channelsMarkdown } from './channel-list';
 
 const args = process.argv.slice(2);
 const CHECK = args.includes('--check');
@@ -105,6 +106,8 @@ async function main() {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'catalog.json'), JSON.stringify(catalog));
   writeFileSync(join(OUT, 'report.md'), report);
+  writeFileSync(join(OUT, 'channels.md'), channelsMarkdown(catalog));
+  writeFileSync(join(OUT, 'channels.csv'), channelsCsv(catalog));
   console.log(report);
 }
 
