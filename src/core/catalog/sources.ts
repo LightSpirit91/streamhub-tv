@@ -33,6 +33,10 @@ export interface PlaylistSource {
   countryFilter?: Set<string>;
   /** Extra category stamped on every entry, e.g. 'lang:heb' -> Israel hub. */
   tag?: string;
+  /** Country for entries that don't carry one (whole lineups for one country). */
+  country?: string;
+  /** Ignore the playlist's own channel ids and merge by name (FAST lineups). */
+  byName?: boolean;
   /** Playlist format. Default m3u. */
   format?: 'm3u' | 'famelack';
   /** Loaded only when the user opens "Explore All". */
@@ -130,6 +134,22 @@ export const SOURCES: PlaylistSource[] = [
       `https://cdn.jsdelivr.net/gh/famelack/famelack-channels@main/tv/raw/countries/${cc}.json`,
     ],
     format: 'famelack' as const,
+  })),
+  // Free ad-supported lineups (official streams), via Matt Huisman's public
+  // playlists: full Plex, Roku, Pluto TV (incl. Pluto TV Latino) and
+  // Samsung TV Plus lineups with their own channel guides.
+  ...(
+    [
+      ['plex', 'us', 'US'], ['plex', 'ca', 'CA'], ['roku', 'all', 'US'],
+      ['pluto', 'us', 'US'], ['pluto', 'ca', 'CA'], ['pluto', 'mx', 'MX'], ['pluto', 'ar', 'AR'], ['pluto', 'cl', 'CL'],
+      ['pluto', 'co', 'CO'], ['pluto', 'pe', 'PE'], ['samsung', 'us', 'US'], ['samsung', 'ca', 'CA'], ['samsung', 'mx', 'MX'],
+    ] as const
+  ).map(([svc, region, cc]) => ({
+    id: `mjh:${region}_${svc}`,
+    label: `${svc === 'pluto' ? 'Pluto TV' : svc === 'samsung' ? 'Samsung TV Plus' : svc === 'plex' ? 'Plex' : 'The Roku Channel'} ${region.toUpperCase()}`,
+    urls: [`https://i.mjh.nz/${svc === 'pluto' ? 'PlutoTV' : svc === 'samsung' ? 'SamsungTVPlus' : svc === 'plex' ? 'Plex' : 'Roku'}/${region}.m3u8`],
+    country: cc,
+    byName: true,
   })),
   {
     id: 'iptv-org:index',

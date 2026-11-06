@@ -33,6 +33,7 @@ const OFFICIAL_HOST_PATTERNS: RegExp[] = [
 ];
 
 const OFFICIAL_SOURCE_FILES = /_(pluto|samsung|roku|plex|tubi|xumo|stirr|stingray|firetv|vizio|tcl|distro|amagi|pbs|cbsn|abcnews|smotrim|ntv|rt)$/;
+// (mjh:<region>_<service> lineups end the same way and count as official.)
 
 const IPV4_HOST = /^\d{1,3}(\.\d{1,3}){3}$/;
 

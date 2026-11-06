@@ -312,3 +312,18 @@ describe('graveyard', () => {
     expect(day2.graveyard.entries.b).toBeUndefined();
   });
 });
+
+describe('lineups merge by name', () => {
+  it('merges the same channel from iptv-org and a Pluto lineup, keeps countries apart', () => {
+    const iptv = parseM3U('#EXTINF:-1 tvg-id="NFLChannel.us@SD",NFL Channel (720p)\nhttps://jmp2.uk/plu-a.m3u8\n#EXTINF:-1 tvg-id="Channel9.il",Channel 9\nhttps://il.example/9.m3u8\n');
+    const pluto = parseM3U('#EXTINF:-1 tvg-id="5ced7d5df64be98e07ed47b6",NFL Channel\nhttps://jmp2.uk/plu-b.m3u8\n#EXTINF:-1 tvg-id="x1",Channel 9\nhttps://au.example/9.m3u8\n');
+    const c = buildCatalog([
+      { source: { id: 'iptv-org:country:us' }, entries: iptv },
+      { source: { id: 'mjh:us_pluto', country: 'US', byName: true }, entries: pluto },
+    ]);
+    const nfl = c.channels.filter((x) => x.name === 'NFL Channel');
+    expect(nfl).toHaveLength(1);
+    expect(nfl[0].streams).toHaveLength(2);
+    expect(c.channels.filter((x) => x.name === 'Channel 9')).toHaveLength(2); // Israel's and the US lineup's stay separate
+  });
+});

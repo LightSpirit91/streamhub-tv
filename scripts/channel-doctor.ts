@@ -133,7 +133,8 @@ async function main() {
     tally = await checkAll(catalog.channels);
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
     // Remember what went offline; revive what came back.
-    const before = readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? [];
+    // Live cams are refreshed nightly by youtube-doctor; they never count as 'died'.
+    const before = (readJson<Catalog>(`${PREV}/catalog.json`)?.channels ?? []).filter((c) => !c.id.startsWith('ytlive:'));
     const g = updateGraveyard(readJson<Graveyard>(`${PREV}/graveyard.json`), before, listed, catalog.channels);
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, 'graveyard.json'), JSON.stringify(g.graveyard));

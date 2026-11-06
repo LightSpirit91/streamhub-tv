@@ -5,10 +5,34 @@ import { BLOCKED_CATEGORIES, type PlaylistSource } from './sources';
 
 export const CATALOG_VERSION = 1;
 const FAST_SOURCE = /_(pluto|samsung|roku|plex|tubi|xumo|stirr|stingray|firetv|vizio|tcl|distro|amagi)$/;
+
+const nameKey = (n: string) =>
+  n.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\b(hd|sd|fhd|uhd|4k|tv)\b/g, '').replace(/[^a-z0-9\u0400-\u04ff\u0590-\u05ff]+/g, '');
+
+/**
+ * Same channel listed by several sources under different ids (an iptv-org id,
+ * a Pluto id, a Plex id...) -> one channel whose streams fail over across all.
+ * Only exact same name AND same country merge.
+ */
+function mergeSameName(map: Map<string, Channel>) {
+  const seen = new Map<string, Channel>();
+  for (const [id, ch] of map) {
+    const key = `${nameKey(ch.name)}|${ch.country ?? ''}`;
+    const first = seen.get(key);
+    if (!first) {
+      seen.set(key, ch);
+      continue;
+    }
+    for (const st of ch.streams) if (!first.streams.some((x) => x.url === st.url)) first.streams.push(st);
+    if (!first.logo && ch.logo) first.logo = ch.logo;
+    for (const c of ch.categories) if (!first.categories.includes(c)) first.categories.push(c);
+    map.delete(id);
+  }
+}
 const SPOTLIGHT_SIZE = 24;
 
 export interface SourceBatch {
-  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag'>;
+  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag' | 'country' | 'byName'>;
   entries: PlaylistEntry[];
 }
 
@@ -26,7 +50,10 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
     // "iptv-org:raw:ca_pluto" -> CA. Used when an entry has no tvg-id, so a
     // channel from the Pluto TV Canada lineup is labelled Canada, not unknown.
     const sourceCountry = /^iptv-org:(?:country|raw):([a-z]{2})(?:_|$)/.exec(source.id)?.[1].toUpperCase();
-    for (const e of entries) {
+    for (const raw of entries) {
+      // Whole-country lineups: default the country, and merge by name instead of
+      // the lineup's internal ids so the same channel from two lists becomes one.
+      const e = source.byName ? { ...raw, tvgId: undefined, country: raw.country ?? source.country } : raw;
       const info = parseName(e.name);
       const country = (e.country === 'GB' ? 'UK' : e.country) ?? countryFromTvgId(e.tvgId) ?? sourceCountry;
       if (source.countryFilter && !source.countryFilter.has(country ?? 'INT')) continue;
@@ -43,7 +70,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
       // The same free (FAST) channel ships in Pluto/Samsung/Roku lineups for
       // several countries without a tvg-id. Merge them into one channel whose
       // streams fail over across regions.
-      const fast = !e.tvgId && FAST_SOURCE.test(source.id);
+      const fast = !e.tvgId && (FAST_SOURCE.test(source.id) || !!source.byName);
       const key = fast ? channelKey(e, info.clean, 'fast') : channelKey(e, info.clean, country);
       let ch = map.get(key);
       if (!ch) {
@@ -70,6 +97,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
     }
   }
 
+  mergeSameName(map);
   const channels = [...map.values()];
   for (const ch of channels) finalizeChannel(ch);
   assignSpotlight(channels);
