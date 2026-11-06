@@ -147,3 +147,16 @@ describe('new movies rule', () => {
     expect(decodeURIComponent(searchUrl(10, 1, 'addeddate desc', 1990))).toContain('year:[1990 TO 2100]');
   });
 });
+
+describe('north american titles', () => {
+  it('keeps US and Canadian productions only', async () => {
+    const { northAmerican } = await import('../movies/types');
+    expect(northAmerican({ origin: ['US'] })).toBe(true);
+    expect(northAmerican({ origin: ['GB', 'CA'] })).toBe(true);
+    expect(northAmerican({ origin: ['KR'] })).toBe(false);
+    expect(northAmerican({ country: 'United States of America' })).toBe(true);
+    expect(northAmerican({ country: 'Canada' })).toBe(true);
+    expect(northAmerican({ country: 'South Korea' })).toBe(false);
+    expect(northAmerican({})).toBe(false);
+  });
+});

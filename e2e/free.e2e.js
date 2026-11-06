@@ -10,11 +10,11 @@ const tubi = (t) => [{ name: 'Tubi TV', type: 'ads', url: `https://tubitv.com/se
 const MOVIE = {
   id: 'tmdb:movie:999001', title: 'Zz Test New Release', year: Number(today.slice(0, 4)), releaseDate: today, genres: ['Drama'],
   description: 'A brand new film.', poster: 'https://image.tmdb.org/t/p/w500/x.jpg', backdrop: 'https://image.tmdb.org/t/p/w1280/x.jpg',
-  url: '', source: 'free', popularity: 9e9, freeOn: tubi('Zz Test New Release'), tmdbId: 999001, tmdbType: 'movie',
+  url: '', source: 'free', popularity: 9e9, origin: ['US'], freeOn: tubi('Zz Test New Release'), tmdbId: 999001, tmdbType: 'movie',
 };
 const SHOW = {
   id: 'tmdb:tv:999002', title: 'Zz Test New Series', year: 2025, releaseDate: today, seasons: 2, genres: ['Drama'], description: 'New episodes.',
-  poster: 'https://image.tmdb.org/t/p/w500/y.jpg', backdrop: 'https://image.tmdb.org/t/p/w1280/y.jpg', source: 'free', popularity: 9e9,
+  poster: 'https://image.tmdb.org/t/p/w500/y.jpg', backdrop: 'https://image.tmdb.org/t/p/w1280/y.jpg', source: 'free', popularity: 9e9, origin: ['CA'],
   freeOn: tubi('Zz Test New Series'), episodes: [], tmdbId: 999002, tmdbType: 'tv',
 };
 

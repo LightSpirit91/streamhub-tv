@@ -1,5 +1,5 @@
 /**
- * Finds the newest movies and series you can watch free in Canada (free or
+ * Finds the newest American and Canadian movies and series you can watch free in Canada (free or
  * free with ads, on services like Tubi, Pluto TV, The Roku Channel, CBC Gem)
  * and adds them to dist/movies.json and dist/shows.json. Runs every night.
  *
@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { freeLinks, parseDetails, type TmdbMeta } from '../src/core/meta/tmdb';
 import { genresFromTmdb } from '../src/core/movies/youtube';
 import { isWatchable, titleKey } from '../src/core/movies/archive';
-import { MIN_NEW_MOVIE_YEAR, type Movie, type MovieCatalog } from '../src/core/movies/types';
+import { MIN_NEW_MOVIE_YEAR, northAmerican, type Movie, type MovieCatalog } from '../src/core/movies/types';
 import type { Show, ShowCatalog } from '../src/core/shows/types';
 
 const args = process.argv.slice(2);
@@ -75,7 +75,8 @@ async function discover(type: 'movie' | 'tv'): Promise<number[]> {
   const today = iso(now);
   const y = new Date().getUTCFullYear();
   const date = type === 'movie' ? 'primary_release_date' : 'first_air_date';
-  const base = { watch_region: 'CA', with_watch_monetization_types: 'free|ads', include_adult: 'false', language: 'en-US' };
+  // American and Canadian productions only, streaming free in Canada.
+  const base = { watch_region: 'CA', with_watch_monetization_types: 'free|ads', with_origin_country: 'US|CA', include_adult: 'false', language: 'en-US' };
   const scans: [Record<string, string>, number][] = [
     [{ sort_by: `${date}.desc`, [`${date}.lte`]: today, [`${date}.gte`]: `${MIN_NEW_MOVIE_YEAR}-01-01`, 'vote_count.gte': '3' }, 20],
     [{ sort_by: 'popularity.desc', [`${date}.gte`]: `${y - 2}-01-01`, [`${date}.lte`]: today }, 10],
@@ -151,7 +152,7 @@ async function run<T extends Movie | Show>(type: 'movie' | 'tv', items: T[], bui
   // 0) Every night: rebuild links from the stored availability with today's rules.
   for (const [id, x] of known) {
     x.freeOn = freeLinks({ ...x, tmdbType: type }, x.title);
-    if (!x.freeOn.length) known.delete(id);
+    if (!x.freeOn.length || !northAmerican(x)) known.delete(id);
   }
 
   // 1) Weekly re-check: drop titles that stopped being free.
@@ -172,7 +173,7 @@ async function run<T extends Movie | Show>(type: 'movie' | 'tv', items: T[], bui
     if (!r) return;
     const item = build(r.meta, r.d) as Free<T> | undefined;
     if (!item || !(item as { freeOn?: unknown[] }).freeOn?.length) return;
-    if (!item.year || item.year < MIN_NEW_MOVIE_YEAR) return;
+    if (!item.year || item.year < MIN_NEW_MOVIE_YEAR || !northAmerican(item)) return;
     if (!isWatchable({ title: item.title, description: item.description })) return;
     if (playTitles.has(`${titleKey(item.title)}|${item.year}`)) return;
     // First import: only what came out in the last two months counts as "just added".
@@ -204,7 +205,7 @@ async function main() {
       if (!title) return undefined;
       return {
         ...common(meta, d, title), id: `tmdb:movie:${meta.tmdbId}`, year, releaseDate: d.release_date || undefined, url: '',
-        minutes: d.runtime || undefined, country: d.production_countries?.[0]?.name, quality: 'HD',
+        minutes: d.runtime || undefined, country: d.production_countries?.[0]?.name, origin: d.origin_country, quality: 'HD',
       };
     });
     c.movies = r.list.sort((a, b) => b.popularity - a.popularity);
@@ -221,7 +222,7 @@ async function main() {
       if (!title) return undefined;
       return {
         ...common(meta, d, title), id: `tmdb:tv:${meta.tmdbId}`, year, releaseDate: d.last_air_date || d.first_air_date || undefined,
-        seasons: d.number_of_seasons, country: d.origin_country?.[0], episodes: [],
+        seasons: d.number_of_seasons, country: d.origin_country?.[0], origin: d.origin_country, episodes: [],
       };
     });
     c.shows = r.list.sort((a, b) => b.popularity - a.popularity);

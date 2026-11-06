@@ -31,6 +31,8 @@ export interface Movie extends TmdbMeta {
   freeOn?: FreeLink[];
   /** Last time the free availability was checked (ms). */
   freeCheckedAt?: number;
+  /** Production countries as ISO codes (free titles), e.g. ['US']. */
+  origin?: string[];
   /** Release date (YYYY-MM-DD) when known; newest-first ordering uses it. */
   releaseDate?: string;
   /** Popularity at the source, used for ordering. */
@@ -71,3 +73,9 @@ export const newEnough = (year?: number): boolean => !!year && year >= MIN_NEW_M
 /** Newest first: release date, then year. */
 export const releaseKey = (m: { releaseDate?: string; year?: number }): string => m.releaseDate ?? (m.year ? `${m.year}-00-00` : '');
 export const byNewest = <T extends { releaseDate?: string; year?: number }>(a: T, b: T): number => releaseKey(b).localeCompare(releaseKey(a));
+
+/** Free-elsewhere titles are American or Canadian productions only. */
+export function northAmerican(x: { origin?: string[]; country?: string }): boolean {
+  if (x.origin?.length) return x.origin.some((c) => c === 'US' || c === 'CA');
+  return /^(US|CA|USA|United States( of America)?|Canada)$/i.test(x.country ?? '');
+}

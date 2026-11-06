@@ -12,6 +12,7 @@ import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { genresFromTmdb } from '../core/movies/youtube';
+import { northAmerican } from '../core/movies/types';
 import { currentFreeLinks, type FreeLink } from '../core/meta/tmdb';
 
 /** Watchable only with a library card: ranked below titles anyone can play right away. */
@@ -99,7 +100,7 @@ const clean = (list: Movie[]) =>
     .filter((m) => m.source !== 'youtube' && isWatchable({ title: m.title, description: m.description }))
     // Free-elsewhere titles: links rebuilt with today's rules (paid / blocked services dropped).
     .map((m) => (m.source === 'free' ? { ...m, freeOn: currentFreeLinks(m) } : m))
-    .filter((m) => m.source !== 'free' || m.freeOn?.length)
+    .filter((m) => m.source !== 'free' || (m.freeOn?.length && northAmerican(m)))
     .map((m) => (libraryOnly(m.freeOn) ? { ...m, popularity: Math.round(m.popularity / 4) } : m))
     .map((m) => ({
       ...m,
@@ -135,7 +136,7 @@ const cleanShows = (list: Show[]) =>
   list
     .filter((x) => x.source !== 'youtube' && isWatchable({ title: x.title, description: x.description }))
     .map((x) => (x.source === 'free' ? { ...x, freeOn: currentFreeLinks(x) } : x))
-    .filter((x) => x.source !== 'free' || x.freeOn?.length)
+    .filter((x) => x.source !== 'free' || (x.freeOn?.length && northAmerican(x)))
     .map((x) => (libraryOnly(x.freeOn) ? { ...x, popularity: Math.round(x.popularity / 4) } : x))
     .sort((a, b) => b.popularity - a.popularity)
     .map((x) => ({ ...x, title: stripEmoji(x.title), episodes: x.episodes.map((e) => ({ ...e, title: stripEmoji(e.title) })) }));

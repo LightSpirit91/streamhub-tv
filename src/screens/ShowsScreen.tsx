@@ -119,7 +119,7 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
         <Row key={g} title={g} subtitle={`${list.length}`} data={list.slice(0, 30)} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       ))}
       <Text style={[styles.note, { marginHorizontal: L.gutter }]}>
-        {shows.length} series, {shows.reduce((n, s) => n + s.episodes.length, 0).toLocaleString()} episodes. The newest series streaming free in Canada (they open on Tubi, Pluto TV and others) and classic public-domain TV.
+        {shows.length} series, {shows.reduce((n, s) => n + s.episodes.length, 0).toLocaleString()} episodes. The newest American and Canadian series streaming free in Canada (they open on Tubi, Pluto TV, CBC Gem and others) and classic public-domain TV.
       </Text>
     </ScrollView>
   );

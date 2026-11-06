@@ -26,6 +26,7 @@ export interface Show extends TmdbMeta {
   source: 'archive' | 'youtube' | 'free';
   freeOn?: FreeLink[];
   freeCheckedAt?: number;
+  origin?: string[];
   /** First air date (YYYY-MM-DD) or, for free series, the latest episode date. */
   releaseDate?: string;
   seasons?: number;
