@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "StreamHub",
+    "slug": "streamhub-tv",
+    "scheme": "streamhub",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07070A",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07070A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lightspirit91.streamhub",
+      "infoPlist": {
+        "NSAppTransportSecurity": { "NSAllowsArbitraryLoads": true }
+      }
+    },
+    "android": {
+      "package": "com.lightspirit91.streamhub",
+      "adaptiveIcon": {
+        "backgroundColor": "#07070A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      ["@react-native-tvos/config-tv", { "isTV": false, "removeFlipperOnAndroid": true }],
+      ["expo-video", { "supportsPictureInPicture": true, "supportsBackgroundPlayback": true }],
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
+      "expo-localization"
+    ]
+  }
+}

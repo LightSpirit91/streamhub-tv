@@ -1,0 +1,41 @@
+# Self-healing channel list. Every night: pull all playlists, merge, probe
+# every stream, drop dead links, publish catalog.json to the `catalog`
+# branch. The app downloads that file once a day (or on pull-to-refresh).
+name: Channel Doctor
+
+on:
+  schedule:
+    - cron: '17 9 * * *' # ~4:17 AM Toronto
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: channel-doctor
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx vitest run
+      - run: npx tsx scripts/channel-doctor.ts --check --out dist
+      - name: Publish to catalog branch
+        run: |
+          cd dist
+          git init -q -b catalog
+          git config user.name "channel-doctor"
+          git config user.email "channel-doctor@users.noreply.github.com"
+          git add catalog.json report.md
+          git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
+      - name: Job summary
+        run: cat dist/report.md >> "$GITHUB_STEP_SUMMARY"
