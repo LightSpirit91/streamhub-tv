@@ -257,12 +257,14 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
       else if (live && k === 'ArrowRight') doVolume(0.1);
       else if (live && k === 'ArrowLeft') doVolume(-0.1);
       else return;
+      // Handled here: stop the focused button from also reacting (no double toggles).
       e.preventDefault();
+      e.stopPropagation();
       showChrome();
     };
     const w = globalThis as unknown as Window;
-    w.addEventListener('keydown', onKey);
-    return () => w.removeEventListener('keydown', onKey);
+    w.addEventListener('keydown', onKey, true);
+    return () => w.removeEventListener('keydown', onKey, true);
   }, [go, onClose, showChrome, seekBy, live, casting, cast.volume]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRemote((t) => {

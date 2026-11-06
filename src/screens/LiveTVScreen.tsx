@@ -80,8 +80,12 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      // Enter on a focused control (filter chip, guide row) belongs to that control,
+      // except the nav tabs, which keep focus after you click "Live TV".
+      if (e.key === 'Enter' && el && el !== document.body && el.getAttribute('role') !== 'tab') return;
       if (e.key === 'ArrowDown') select(Math.min(list.length - 1, sel + 1), true);
       else if (e.key === 'ArrowUp') select(Math.max(0, sel - 1), true);
       else if (e.key === 'PageDown') select(Math.min(list.length - 1, sel + 10), true);
@@ -89,10 +93,12 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
       else if (e.key === 'Enter' && list[sel]) onFullscreen(list[sel], list);
       else return;
       e.preventDefault();
+      e.stopPropagation();
     };
     const w = globalThis as unknown as Window;
-    w.addEventListener('keydown', onKey);
-    return () => w.removeEventListener('keydown', onKey);
+    // Capture phase: the guide sees arrows and Enter before a focused button swallows them.
+    w.addEventListener('keydown', onKey, true);
+    return () => w.removeEventListener('keydown', onKey, true);
   }, [sel, list, select, onFullscreen]);
 
   const wide = !L.compact && L.ff !== 'tablet';

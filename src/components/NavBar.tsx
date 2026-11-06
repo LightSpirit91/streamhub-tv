@@ -46,7 +46,7 @@ export function TopBar({ tab, onTab, compact, gutter }: Props) {
 function TopTab({ label, Icon, active, onPress }: { label: string; Icon: typeof Home; active: boolean; onPress(): void }) {
   const f = useFocusRing();
   return (
-    <Pressable onPress={onPress} {...f.handlers} style={[styles.tab, (active || f.on) && styles.tabOn, f.on && styles.tabFocus]}>
+    <Pressable onPress={onPress} {...f.handlers} accessibilityRole="tab" accessibilityLabel={`${label} tab`} accessibilityState={{ selected: active }} style={[styles.tab, (active || f.on) && styles.tabOn, f.on && styles.tabFocus]}>
       <Icon size={16} color={active ? colors.text : colors.textDim} strokeWidth={2.2} />
       <Text style={[styles.tabText, active && { color: colors.text }]}>{label}</Text>
     </Pressable>
@@ -75,7 +75,7 @@ export function BottomTabs({ tab, onTab }: { tab: Tab; onTab(t: Tab): void }) {
       {TABS.map(({ id, label, Icon }) => {
         const on = tab === id;
         return (
-          <Pressable key={id} onPress={() => onTab(id)} style={styles.btab} accessibilityLabel={label}>
+          <Pressable key={id} onPress={() => onTab(id)} style={styles.btab} accessibilityRole="tab" accessibilityLabel={`${label} tab`} accessibilityState={{ selected: on }}>
             <Icon size={21} color={on ? colors.gold : colors.textFaint} strokeWidth={on ? 2.4 : 2} />
             <Text style={[styles.btabText, on && { color: colors.text }]}>{label}</Text>
           </Pressable>
