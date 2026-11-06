@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import {
-  ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
+  Airplay, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
   RectangleHorizontal, RotateCcw, RotateCw, Volume2, VolumeX,
 } from 'lucide-react-native';
 import type { Channel, Stream } from '../core/types';
@@ -14,6 +14,8 @@ import { useRemote } from '../tv/useRemote';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
 import StreamVideo from './MediaView';
+import { airPlaySupported, castMedia, stopCasting, useCast } from './cast/useCast';
+import AirPlayNative from './cast/AirPlayNative';
 import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
 import { clock, useNow } from '../hooks/useNow';
 import type { Fit } from './StreamVideo.types';
@@ -230,6 +232,40 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const isWeb = Platform.OS === 'web';
   const nowSec = useNow();
   const guide = useProgramme(id, nowSec);
+
+  // Chromecast: once connected, every channel switch or episode follows to the TV.
+  const cast = useCast();
+  const casting = !!cast.device;
+  const [airplay, setAirplay] = useState(0);
+  const [castError, setCastError] = useState<string | null>(null);
+  const sendToTv = useCallback(async () => {
+    if (!stream || stream.format === 'youtube') return;
+    try {
+      setCastError(null);
+      await castMedia({
+        url: stream.url,
+        format: stream.format,
+        live,
+        title: channel?.name ?? movie?.title ?? '',
+        subtitle: live ? guide.now?.[2] ?? channel?.tagline : movie?.year ? String(movie.year) : undefined,
+        image: channel?.logo ?? movie?.posterHi ?? movie?.poster,
+        startAt: live ? undefined : time.cur || undefined,
+      });
+      setPaused(true);
+    } catch (e) {
+      const msg = (e as Error)?.message ?? '';
+      if (msg && !/cancel/i.test(msg)) setCastError('This channel could not start on the TV. Try another source or channel.');
+    }
+  }, [stream, live, channel, movie, guide.now, time.cur]);
+  useEffect(() => {
+    if (casting) sendToTv();
+  }, [casting, stream?.url]); // eslint-disable-line react-hooks/exhaustive-deps
+  // When the TV session ends, pick up playback here again.
+  const wasCasting = useRef(false);
+  useEffect(() => {
+    if (wasCasting.current && !casting) setPaused(false);
+    wasCasting.current = casting;
+  }, [casting]);
   const title = channel?.name ?? movie?.title ?? '';
   const ic = colors.text;
 
@@ -244,6 +280,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           paused={paused}
           fit={fit.fit}
           pipRequest={pip}
+          airplayRequest={airplay}
           seek={seek}
           startAt={resumeAt > 60 ? resumeAt : undefined}
           onTime={onTime}
@@ -261,7 +298,23 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
       <Pressable style={StyleSheet.absoluteFill} onPress={showChrome} focusable={false} />
 
-      {state.kind !== 'playing' && <StatusOverlay state={state} title={title} sources={streams.length} live={live} />}
+      {casting ? (
+        <View style={styles.casting} pointerEvents="box-none">
+          <Cast size={46} color={colors.gold} />
+          <Text style={styles.castHead}>Playing on {cast.device}</Text>
+          <Text style={styles.statusDetail}>{live ? 'Channel up and down follow to the TV.' : 'Use the TV or this screen to control playback.'}</Text>
+          <Pressable style={styles.castStop} onPress={() => { stopCasting(); setPaused(false); }}>
+            <Text style={styles.unmuteText}>Stop casting</Text>
+          </Pressable>
+        </View>
+      ) : state.kind !== 'playing' ? (
+        <StatusOverlay state={state} title={title} sources={streams.length} live={live} />
+      ) : null}
+      {castError ? (
+        <Pressable style={styles.unmute} onPress={() => setCastError(null)}>
+          <Text style={styles.unmuteText}>{castError}</Text>
+        </Pressable>
+      ) : null}
 
       {autoMuted && state.kind === 'playing' && (
         <Pressable style={styles.unmute} onPress={() => { setAutoMuted(false); setMuted(false); }}>
@@ -309,6 +362,17 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
                 </Text>
               ) : null}
             </View>
+            {stream?.format !== 'youtube' && (cast.available || casting) ? (
+              <IconBtn onPress={() => (casting ? stopCasting() : sendToTv())} label={casting ? 'Stop casting' : 'Cast to TV'}>
+                <Cast size={22} color={casting ? colors.gold : ic} />
+              </IconBtn>
+            ) : null}
+            {Platform.OS === 'web' && airPlaySupported() ? (
+              <IconBtn onPress={() => setAirplay((n) => n + 1)} label="AirPlay to TV">
+                <Airplay size={22} color={ic} />
+              </IconBtn>
+            ) : null}
+            {Platform.OS === 'ios' ? <AirPlayNative /> : null}
             {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
               <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
             ) : null}
@@ -490,4 +554,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.lineHi,
   },
   unmuteText: { color: colors.text, fontFamily: fonts.bodyBold, fontSize: 15 },
+  casting: { ...fill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,7,11,0.92)', gap: 10, paddingHorizontal: 32 },
+  castHead: { ...type.h2, color: colors.text, fontSize: 26, textAlign: 'center' },
+  castStop: {
+    marginTop: 14, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24, borderWidth: 1.5, borderColor: colors.lineHi,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
 });

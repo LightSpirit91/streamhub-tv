@@ -81,6 +81,11 @@ export default function StreamVideo(p: StreamVideoProps) {
     else v.play().catch(() => {});
   }, [p.paused]);
   useEffect(() => {
+    const v = ref.current as (HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }) | null;
+    if (p.airplayRequest) v?.webkitShowPlaybackTargetPicker?.();
+  }, [p.airplayRequest]);
+
+  useEffect(() => {
     const v = ref.current as (HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> }) | null;
     if (p.pipRequest && v?.requestPictureInPicture) v.requestPictureInPicture().catch(() => {});
   }, [p.pipRequest]);
@@ -90,6 +95,7 @@ export default function StreamVideo(p: StreamVideoProps) {
       ref={ref}
       playsInline
       autoPlay
+      {...({ 'x-webkit-airplay': 'allow' } as Record<string, string>)}
       style={{
         position: 'absolute', inset: 0, width: '100%', height: '100%',
         objectFit: p.fit, backgroundColor: '#000',

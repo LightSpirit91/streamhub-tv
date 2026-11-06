@@ -13,6 +13,8 @@ export interface StreamVideoProps {
   fit: Fit;
   /** Bump to request Picture-in-Picture. */
   pipRequest: number;
+  /** Bump to open the AirPlay picker (Safari). */
+  airplayRequest?: number;
   /** VOD: jump here (seconds). `n` changes on every request. */
   seek?: { to: number; n: number };
   /** VOD: start position in seconds. */
