@@ -1,0 +1,95 @@
+# Daily discovery: GitHub search for new public playlists, safety rules, real
+# playback check. See docs/DISCOVERY.md and config/refresh.json.
+#
+# MANUAL ONLY until you approve a schedule. To run it daily, uncomment the
+# two "schedule" lines below (7:05 AM Toronto, after the nightly update).
+#
+# Safety: the search + checks run in a job with read-only permissions and no
+# saved credentials (the token can only read). Repository files are read as
+# text data and never executed. A separate job publishes only the expected
+# output files.
+name: Discovery
+
+on:
+  # schedule:
+  #   - cron: '5 12 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the links found (off = dry run: search and check only, nothing changes)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: catalog-branch
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog (read only)
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" current
+      - run: npx tsx scripts/discovery.ts --current current --out out
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: discovery
+          path: |
+            out/discovered.m3u
+            out/discovery/*.json
+            out/discovery/*.md
+          retention-days: 3
+      - run: cat out/discovery/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+  publish:
+    needs: discover
+    if: github.event_name == 'schedule' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: discovery
+          path: found
+      - name: Keep only the expected files
+        run: |
+          mkdir -p dist/discovery
+          test -f found/discovered.m3u && head -c 7 found/discovered.m3u | grep -q '#EXTM3U' && cp found/discovered.m3u dist/
+          for f in repos.json summary.json report.md; do
+            [ -f "found/discovery/$f" ] && cp "found/discovery/$f" dist/discovery/
+          done
+          node -e "for (const f of ['repos.json','summary.json']) JSON.parse(require('fs').readFileSync('dist/discovery/'+f,'utf8'))"
+      - run: npx tsx scripts/history.ts --dist dist --previous dist --job Discovery
+      - name: Publish
+        run: |
+          cd dist
+          rm -rf .git
+          git init -q -b catalog
+          git config user.name "discovery"
+          git config user.email "discovery@users.noreply.github.com"
+          git add -A
+          git commit -qm "Discovery $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog

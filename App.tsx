@@ -31,6 +31,7 @@ import { APP_VERSION } from './src/version';
 import { ReminderBanner } from './src/components/ReminderBanner';
 import { WeekGuide } from './src/components/WeekGuide';
 import { SourcesSheet } from './src/components/SourcesSheet';
+import { SportsSheet } from './src/components/SportsSheet';
 import { useUi } from './src/state/ui';
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
   const schedule = useUi((s) => s.schedule);
   const closeSchedule = useUi((s) => s.closeSchedule);
   const sourcesOpen = useUi((s) => s.sources);
+  const sportsOpen = useUi((s) => s.sports);
   const allChannels = useStreamHub((s) => s.channels);
   // Chromecast: remember what's on the TV so the bar can reopen its remote.
   const castDevice = useCast().device;
@@ -191,6 +193,15 @@ export default function App() {
       )}
       {playing && <PlayerScreen item={playing} onChange={setPlaying} onClose={() => setPlaying(null)} />}
       {sourcesOpen && <SourcesSheet onClose={() => useUi.getState().setSources(false)} />}
+      {sportsOpen && (
+        <SportsSheet
+          onClose={() => useUi.getState().setSports(false)}
+          onPlay={(c, row) => {
+            useUi.getState().setSports(false);
+            playChannel(c, row);
+          }}
+        />
+      )}
       {schedule && (
         <WeekGuide
           channel={schedule}

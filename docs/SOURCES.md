@@ -21,6 +21,8 @@ and the player fails over between a channel's links. Streams whose server
 doesn't allow other websites (no CORS) are ranked last in Chrome/Edge/Firefox;
 Safari, the iPhone app and the Fire TV app play them.
 
+New sources are also found by the daily discovery (manual until approved): see [DISCOVERY.md](DISCOVERY.md).
+
 ## Research only: not integrated
 
 | Repository | What it actually is | Why it stays off | What would change that |

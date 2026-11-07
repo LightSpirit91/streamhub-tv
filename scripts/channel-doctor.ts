@@ -24,7 +24,11 @@ import { enrichChannels, type DbChannel, type DbLogo } from '../src/core/catalog
 import { updateGraveyard, type Graveyard } from '../src/core/catalog/graveyard';
 import { baseId, blockedIds } from '../src/core/catalog/blocklist';
 import { existsSync, readFileSync } from 'node:fs';
-import { isBannedStream, youtubeId } from '../src/core/catalog/normalize';
+import { isBannedStream } from '../src/core/catalog/normalize';
+import { validateStream, type Verdict as Check } from '../src/core/playback/validate';
+import { emptyHealth, pruneHealth, recordLink, recordSource, restingLink, restingSources, type HealthState } from '../src/core/playback/health';
+import { parseSettings } from '../src/core/refresh/settings';
+import { Budget, makeGetBytes } from './lib/net';
 
 const DB = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 
@@ -53,63 +57,97 @@ const readJson = <T,>(path: string): T | undefined => {
   }
 };
 
-type Verdict = 'ok' | 'dead' | 'locked' | 'timeout';
+const SETTINGS = parseSettings(readJson('config/refresh.json'));
+const RULES = SETTINGS.playbackCheck;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function probe(s: Stream): Promise<Verdict> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 10_000);
-  try {
-    if (s.format === 'youtube') {
-      // oEmbed answers 200 for embeddable videos, 401/404 when embedding is off or the video is gone.
-      const id = youtubeId(s.url);
-      const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${id}`, { signal: ctrl.signal });
-      return res.ok ? 'ok' : res.status === 429 ? 'timeout' : 'dead';
+/**
+ * Real playback check (settings: playbackCheck). Deep: playlist -> variant ->
+ * first segment must be actual video bytes. Shallow (deep: false): the
+ * playlist must answer and be a playlist. Failures are retried with backoff
+ * (2 s, then 6 s) inside the run before they count as a strike.
+ */
+async function probe(s: Stream, get: ReturnType<typeof makeGetBytes>): Promise<Check> {
+  const headers = { Origin: 'https://lightspirit91.github.io', ...(s.headers ?? {}) };
+  const once = async (): Promise<Check> => {
+    if (RULES.deep) return validateStream(s.url, get, { format: s.format === 'youtube' ? undefined : s.format, headers, live: true });
+    try {
+      const r = await get(s.url, headers);
+      if ([401, 403, 451].includes(r.status)) return { ok: false, reason: 'locked', detail: `HTTP ${r.status}`, cors: r.cors };
+      if (r.status >= 400 || !r.status) return { ok: false, reason: r.type === 'unsafe' ? 'unsafe' : 'http', detail: `HTTP ${r.status}` };
+      const head = new TextDecoder().decode(r.bytes.subarray(0, 2048));
+      return s.format !== 'hls' || head.includes('#EXTM3U') ? { ok: true, kind: 'hls', detail: 'playlist', cors: r.cors } : { ok: false, reason: 'not-media', detail: 'not a playlist' };
+    } catch (e) {
+      const name = (e as Error).name;
+      return { ok: false, reason: name === 'AbortError' ? 'timeout' : name === 'BudgetError' ? 'skipped' : 'network', detail: name };
     }
-    const res = await fetch(s.url, { signal: ctrl.signal, headers: { Origin: 'https://lightspirit91.github.io', ...(s.headers ?? {}) }, redirect: 'follow' });
-    // Browsers other than Safari can only play streams whose server allows other websites.
-    s.cors = !!res.headers.get('access-control-allow-origin');
-    if (res.status === 403 || res.status === 451) return 'locked';
-    if (!res.ok) return 'dead';
-    if (s.format !== 'hls') return 'ok';
-    const head = (await res.text()).slice(0, 2048);
-    return head.includes('#EXTM3U') ? 'ok' : 'dead';
-  } catch (e) {
-    return (e as Error).name === 'AbortError' ? 'timeout' : 'dead';
-  } finally {
-    clearTimeout(t);
+  };
+  let v = await once();
+  for (const wait of [2000, 6000]) {
+    if (v.ok || ['locked', 'skipped', 'unsafe', 'http'].includes(v.reason)) break;
+    await sleep(wait);
+    v = await once();
   }
+  return v;
 }
 
-async function checkAll(channels: Channel[]) {
+async function checkAll(channels: Channel[], health: HealthState, deadline: number) {
+  const now = Date.now();
+  const budget = new Budget(SETTINGS.limits.maxRequestsPerRun, deadline);
+  const get = makeGetBytes({ budget, timeoutMs: RULES.timeoutSeconds * 1000 });
   const streams = channels.flatMap((c) => c.streams);
-  const verdicts = new Map<string, Verdict>();
+  const keep = new Map<string, boolean>();
+  const tally = { ok: 0, strike: 0, removed: 0, resting: 0, locked: 0, unknown: 0 };
+  const bySource = new Map<string, { links: number; working: number }>();
   let i = 0;
-  const workers = Array.from({ length: 48 }, async () => {
-    while (i < streams.length) {
-      const s = streams[i++];
-      verdicts.set(s.url, await probe(s));
-    }
-  });
-  await Promise.all(workers);
+  await Promise.all(
+    Array.from({ length: RULES.concurrency }, async () => {
+      while (i < streams.length) {
+        const s = streams[i++];
+        if (keep.has(s.url)) continue;
+        const src = bySource.get(s.source) ?? { links: 0, working: 0 };
+        bySource.set(s.source, src);
+        src.links++;
+        if (restingLink(health, s.url, RULES, now)) {
+          keep.set(s.url, false);
+          tally.resting++;
+          continue;
+        }
+        const v = await probe(s, get);
+        if (v.cors !== undefined) s.cors = v.cors;
+        const r = recordLink(health, s.url, v, RULES, now);
+        keep.set(s.url, r.keep);
+        if (r.outcome === 'pass') {
+          tally.ok++;
+          src.working++;
+          s.score += 20;
+        } else if (!r.keep) tally.removed++;
+        else if (r.outcome === 'fail') tally.strike++;
+        else if (!v.ok && v.reason === 'locked') tally.locked++;
+        else tally.unknown++;
+      }
+    }),
+  );
   for (const c of channels) {
-    c.streams = c.streams.filter((s) => verdicts.get(s.url) !== 'dead');
-    for (const s of c.streams) if (verdicts.get(s.url) === 'ok') s.score += 20;
+    c.streams = c.streams.filter((s) => keep.get(s.url) !== false);
     finalizeChannel(c);
   }
-  const tally = { ok: 0, dead: 0, locked: 0, timeout: 0 };
-  for (const v of verdicts.values()) tally[v]++;
-  return tally;
+  pruneHealth(health, new Set(streams.map((s) => s.url)), now);
+  return { ...tally, requests: budget.used, bySource, outOfBudget: budget.exhausted };
 }
 
 async function main() {
   const started = Date.now();
   const failed: string[] = [];
+  const health = readJson<HealthState>(`${PREV}/health.json`) ?? emptyHealth();
+  const resting = restingSources(health, RULES, started);
+  const skipped = SOURCES.filter((s) => SETTINGS.excludedSources.includes(s.id) || resting.has(s.id)).map((s) => s.id);
   const catalog = await loadCatalog({
-    sources: SOURCES.filter((s) => !s.lazy),
+    sources: SOURCES.filter((s) => !s.lazy && !skipped.includes(s.id)),
     onProgress: (d, t, id) => process.stdout.write(`\r  sources ${d}/${t} ${id.padEnd(40)}`),
   });
   process.stdout.write('\n');
-  for (const s of SOURCES) if (!s.lazy && !s.deny && !catalog.sources.includes(s.id)) failed.push(s.id);
+  for (const s of SOURCES) if (!s.lazy && !s.deny && !skipped.includes(s.id) && !catalog.sources.includes(s.id)) failed.push(s.id);
 
   const enriched = await enrich(catalog.channels);
   // iptv-org blocklist (copyright claims, adult) and channels the database marks as closed.
@@ -150,7 +188,16 @@ async function main() {
   let grave = { died: [] as string[], revived: [] as string[], size: 0 };
   if (CHECK) {
     const listed = new Set(catalog.channels.map((c) => c.id));
-    tally = await checkAll(catalog.channels);
+    // About half the run's time limit goes to link checks; the rest to movies, shows and the guide.
+    tally = await checkAll(catalog.channels, health, started + SETTINGS.limits.maxRunMinutes * 30_000);
+    for (const s of SOURCES) {
+      if (s.lazy || s.deny || skipped.includes(s.id)) continue;
+      const n = tally.bySource.get(s.id) ?? { links: 0, working: 0 };
+      recordSource(health, s.id, n.links, n.working, catalog.sources.includes(s.id), RULES, started);
+    }
+    health.updatedAt = Date.now();
+    mkdirSync(OUT, { recursive: true });
+    writeFileSync(join(OUT, 'health.json'), JSON.stringify(health));
     catalog.channels = catalog.channels.filter((c) => c.streams.length);
     // Remember what went offline; revive what came back.
     // Channels removed on purpose (YouTube, Samsung TV Plus, Plex) are not 'offline'; they are not remembered.
@@ -180,7 +227,10 @@ async function main() {
     `- Removed: ${removedBlock} (iptv-org blocklist ${blocked.size} entries, closed channels ${enriched.closed.size})`,
     `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy && !s.deny).length}`,
     failed.length ? `- Sources unreachable: ${failed.join(', ')}` : '',
-    tally ? `- Probe: ${tally.ok} ok, ${tally.locked} geo-locked (kept), ${tally.timeout} timeout (kept), ${tally.dead} dead (removed)` : '- Probe: skipped',
+    tally
+      ? `- Playback check (${RULES.deep ? 'real video bytes' : 'playlist only'}): ${tally.ok} play, ${tally.strike} failed tonight (kept, strike), ${tally.removed} removed, ${tally.resting} resting (removed, re-test in ${RULES.recheckRemovedEveryDays} days), ${tally.locked} geo-locked (kept), ${tally.unknown} no answer (kept) · ${tally.requests} requests${tally.outOfBudget ? ' · request/time limit reached' : ''}`
+      : '- Playback check: skipped',
+    skipped.length ? `- Sources switched off: ${skipped.join(', ')}` : '',
     tally ? `- Graveyard: ${grave.died.length} went offline tonight, ${grave.revived.length} came back to life, ${grave.size} remembered` : '',
     ``,
     `| Hub | Channels |`,
@@ -192,6 +242,16 @@ async function main() {
   ].join('\n');
 
   mkdirSync(OUT, { recursive: true });
+  // Publish guard: a sudden big drop means something broke upstream, not that
+  // the channels died. Keep yesterday's list and say so.
+  const prevCount = readJson<Catalog>(`${PREV}/catalog.json`)?.channels.length ?? 0;
+  const floor = prevCount * (1 - SETTINGS.publishGuard.maxChannelDropPercent / 100);
+  if (prevCount && catalog.channels.length < floor) {
+    const warn = `\n\n**Publish guard: kept yesterday's ${prevCount} channels.** Tonight found ${catalog.channels.length} (more than ${SETTINGS.publishGuard.maxChannelDropPercent}% fewer).`;
+    writeFileSync(join(OUT, 'report.md'), report.replace(/Built [^\n]*/, (m) => m) + warn);
+    console.log(report + warn);
+    return;
+  }
   writeFileSync(join(OUT, 'catalog.json'), JSON.stringify(catalog));
   writeFileSync(join(OUT, 'report.md'), report);
   writeFileSync(join(OUT, 'channels.md'), channelsMarkdown(catalog));

@@ -90,6 +90,7 @@ jobs:
           find grabbed -maxdepth 1 -type f -name '*.xml.gz' -exec cp {} dist/epg-grab/ \; 2>/dev/null || true
           ls -la dist/epg-grab
       - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
+      - run: npx tsx scripts/history.ts --dist dist --previous dist --job "TV Guide Plus"
       - name: Publish
         run: |
           cd dist

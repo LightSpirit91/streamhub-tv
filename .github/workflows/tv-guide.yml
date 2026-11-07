@@ -26,8 +26,22 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Load current catalog
         run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
-      - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
+      # Honours "guideEveryHours" in config/refresh.json (scheduled runs only).
+      - id: due
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          hours=$(jq -r '.refresh.guideEveryHours // 6' config/refresh.json | grep -E '^[0-9]+$' || echo 6)
+          [ "$hours" -lt 6 ] && hours=6
+          built=$(jq -r '.builtAt // 0' dist/epg.json 2>/dev/null || echo 0)
+          age=$(( $(date +%s) - built / 1000 ))
+          echo "guide age ${age}s, refresh every ${hours}h"
+          if [ "$age" -ge $(( (hours - 1) * 3600 )) ]; then echo "go=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.due.outputs.go == 'true'
+        run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
+      - if: steps.due.outputs.go == 'true'
+        run: npx tsx scripts/history.ts --dist dist --previous dist --job "TV guide"
       - name: Publish
+        if: steps.due.outputs.go == 'true'
         run: |
           cd dist
           rm -rf .git
@@ -37,4 +51,4 @@ jobs:
           git add -A
           git commit -qm "TV guide $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
-      - run: cat dist/epg-report.md >> "$GITHUB_STEP_SUMMARY"
+      - run: cat dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

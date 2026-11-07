@@ -1,0 +1,49 @@
+# Restore the channel, movie and show lists from an earlier night.
+# Run it from the Actions tab: Rollback -> Run workflow -> type the date.
+# Snapshots kept: "snapshotsToKeep" in config/refresh.json (default 7).
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'Night to restore (YYYY-MM-DD). The Refresh & health panel lists the ones kept.'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-branch
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
+      - name: Restore
+        env:
+          DAY: ${{ inputs.day }}
+        run: npx tsx scripts/rollback.ts --dist dist --day "$DAY"
+      - env:
+          DAY: ${{ inputs.day }}
+        run: npx tsx scripts/history.ts --dist dist --previous dist --job "Rollback to $DAY"
+      - name: Publish
+        run: |
+          cd dist
+          rm -rf .git
+          git init -q -b catalog
+          git config user.name "rollback"
+          git config user.email "rollback@users.noreply.github.com"
+          git add -A
+          git commit -qm "Rollback $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog

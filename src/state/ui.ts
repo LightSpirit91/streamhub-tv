@@ -11,6 +11,9 @@ interface UiState {
   sources: boolean;
   setSources(open: boolean): void;
   /** Text handed from the top search box to the Search page. */
+  /** Sports & Fights week page. */
+  sports: boolean;
+  setSports(open: boolean): void;
   /** The top search box's suggestion list is showing (lifts the top bar above the page). */
   searchOpen: boolean;
   setSearchOpen(open: boolean): void;
@@ -24,6 +27,8 @@ export const useUi = create<UiState>((set) => ({
   closeSchedule: () => set({ schedule: null }),
   sources: false,
   setSources: (open) => set({ sources: open }),
+  sports: false,
+  setSports: (open) => set({ sports: open }),
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
   searchQuery: '',
@@ -31,4 +36,4 @@ export const useUi = create<UiState>((set) => ({
 }));
 
 /** True while an overlay owns the keyboard / remote (screens underneath ignore keys). */
-export const overlayOpen = () => !!useUi.getState().schedule || useUi.getState().sources;
+export const overlayOpen = () => !!useUi.getState().schedule || useUi.getState().sources || useUi.getState().sports;

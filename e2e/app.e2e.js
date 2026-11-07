@@ -78,6 +78,19 @@ async function run(b, name, viewport) {
     const back = await count();
     if (Math.abs(back - before) > Math.max(20, before * 0.02)) throw new Error(`count did not come back (${before} -> ${back})`);
   });
+  await step('Sports week page opens from Live TV and closes', async () => {
+    await p.click('[aria-label="Sports week"]');
+    await p.getByText('Sports & Fights', { exact: true }).waitFor({ timeout: 5000 });
+    await p.getByText(/^All \d+/).first().waitFor({ timeout: 5000 });
+    await p.locator('[aria-label="Close sports"]').last().click(); await p.waitForTimeout(300);
+    if (await p.getByText('Sports & Fights', { exact: true }).count()) throw new Error('sports page did not close');
+  });
+  await step('Sources panel shows Refresh & health', async () => {
+    await p.click('[aria-label="Channel sources"]');
+    await p.getByText('Refresh & health', { exact: true }).or(p.getByText(/Refresh status appears/)).first().waitFor({ timeout: 8000 });
+    await p.getByText('Daily discovery', { exact: false }).first().waitFor({ timeout: 3000 });
+    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  });
   await step('Live TV filter chip', async () => { await p.getByText('Israel', { exact: true }).first().click(); await p.waitForTimeout(600); });
   await step('Movies page + details + close', async () => {
     await tab('Movies'); await p.waitForTimeout(1500);

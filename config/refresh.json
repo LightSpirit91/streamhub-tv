@@ -1,0 +1,42 @@
+{
+  "$comment": "StreamHub refresh settings. Edit on GitHub; the nightly jobs read this file. Values outside the allowed range are clamped. Nothing here can turn on a paid service.",
+  "refresh": {
+    "channelsEveryHours": 24,
+    "guideEveryHours": 6,
+    "moviesEveryHours": 24
+  },
+  "playbackCheck": {
+    "deep": true,
+    "timeoutSeconds": 10,
+    "concurrency": 48,
+    "failuresBeforeRemoval": 3,
+    "recheckRemovedEveryDays": 7
+  },
+  "limits": {
+    "maxRequestsPerRun": 60000,
+    "maxRunMinutes": 70,
+    "costCapUsd": 0
+  },
+  "discovery": {
+    "enabled": true,
+    "maxReposPerRun": 25,
+    "maxPlaylistsPerRepo": 6,
+    "maxPlaylistBytes": 5000000,
+    "maxNewLinksPerRun": 400,
+    "searches": [
+      "topic:iptv m3u",
+      "topic:m3u8 playlist",
+      "iptv playlist in:name,description",
+      "free tv m3u in:name,description",
+      "fast channels m3u in:name,description"
+    ],
+    "excludedRepos": [],
+    "excludedHosts": [],
+    "trustedHosts": []
+  },
+  "excludedSources": [],
+  "snapshotsToKeep": 7,
+  "publishGuard": {
+    "maxChannelDropPercent": 30
+  }
+}

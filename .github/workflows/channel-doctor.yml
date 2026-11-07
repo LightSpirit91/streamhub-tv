@@ -19,18 +19,26 @@ concurrency:
 
 jobs:
   # Backup schedule: skip when tonight's catalog is already fresh (built in the last 6 hours).
+  # Also honours "channelsEveryHours" in config/refresh.json (24 = nightly; 48 = every other night...).
   gate:
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.fresh.outputs.skip }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: config
       - id: fresh
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then exit 0; fi
           built=$(curl -s "https://raw.githubusercontent.com/${{ github.repository }}/catalog/report.md" | grep -o 'Built [0-9T:.-]*Z' | cut -d' ' -f2)
           age=$(( $(date +%s) - $(date -d "${built:-1970-01-01}" +%s) ))
-          echo "catalog age ${age}s"
-          if [ "$age" -lt 21600 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+          hours=$(jq -r '.refresh.channelsEveryHours // 24' config/refresh.json 2>/dev/null | grep -E '^[0-9]+$' || echo 24)
+          [ "$hours" -lt 24 ] && hours=24; [ "$hours" -gt 168 ] && hours=168
+          if [ "$hours" -le 24 ]; then min=21600; else min=$(( (hours - 3) * 3600 )); fi
+          echo "catalog age ${age}s, refresh every ${hours}h"
+          if [ "$age" -lt "$min" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
 
   doctor:
     needs: gate
@@ -54,6 +62,9 @@ jobs:
           cp -r prev/subs dist/ 2>/dev/null || true
           # Week-long schedules collected by the TV Guide Plus job.
           cp -r prev/epg-grab dist/ 2>/dev/null || true
+          # Audit history + snapshots, link health, and the daily discovery finds.
+          cp -r prev/history prev/discovery dist/ 2>/dev/null || true
+          cp prev/*.m3u dist/ 2>/dev/null || true
       - run: npx tsx scripts/channel-doctor.ts --check --previous prev --out dist
       - name: Channel previews
         continue-on-error: true
@@ -75,6 +86,8 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
       - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
         continue-on-error: true
+      - name: Audit log, snapshot, status
+        run: npx tsx scripts/history.ts --dist dist --previous prev --job "Channel Doctor"
       - name: Publish to catalog branch
         run: |
           cd dist
@@ -86,4 +99,4 @@ jobs:
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary
-        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/shows-report.md dist/tmdb-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/shows-report.md dist/tmdb-report.md dist/epg-report.md dist/discovery/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

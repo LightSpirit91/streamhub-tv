@@ -33,6 +33,7 @@ export function SportsRow({ width, gutter, onPlay }: { width: number; gutter: nu
   if (!events.length) return null;
   return (
     <Row
+      onSeeAll={() => useUi.getState().setSports(true)}
       title="Live & Upcoming Sports"
       subtitle="from the TV guide · your time zone"
       accent={colors.live}

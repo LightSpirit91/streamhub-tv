@@ -60,3 +60,17 @@ describe('xmltv', () => {
     expect(nowNext(list, 50).now).toBeUndefined();
   });
 });
+
+import { sportKind } from '../epg/sports';
+describe('sports & fights week', () => {
+  it('files events under the right sport', () => {
+    expect(sportKind('UFC Fight Night: Main Card')).toBe('fight');
+    expect(sportKind('Live Prelims', undefined, { hubs: [], name: 'DAZN Ringside' })).toBe('fight');
+    expect(sportKind('Бокс. Сергей Липинец – Марк Урванов')).toBe('fight');
+    expect(sportKind('Live: Fútbol Americano Universitario')).toBe('football');
+    expect(sportKind('Live: Italian Serie A Soccer')).toBe('soccer');
+    expect(sportKind('Хоккей. Кубок Будущего')).toBe('hockey');
+    expect(sportKind('Formula 1. Sao Paulo Grand Prix')).toBe('racing');
+    expect(sportKind('Clwb Rygbi: Cymru v Japan')).toBe('other');
+  });
+});

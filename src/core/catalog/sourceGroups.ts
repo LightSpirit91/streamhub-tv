@@ -41,6 +41,14 @@ export const SOURCE_GROUPS: SourceGroup[] = [
     about: 'Uptime-checked public channels by country.',
     match: /^famelack:/,
   },
+  {
+    id: 'discovered',
+    name: 'Daily discovery',
+    credit: 'Found by StreamHub in public GitHub playlists (repo noted per link)',
+    license: 'Only links on broadcaster / free-TV hosts StreamHub already plays from',
+    about: 'New links found by the daily GitHub search. Each one passed the safety rules and a real playback check, and is re-checked every night. No PPV, no account links, no faked headers.',
+    match: /^discovered$/,
+  },
 ];
 
 export const groupOf = (sourceId: string) => SOURCE_GROUPS.find((g) => g.match.test(sourceId))?.id;

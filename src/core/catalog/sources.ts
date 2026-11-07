@@ -24,6 +24,12 @@ export const STREAMHUB_UPCOMING_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/upcoming.json';
 export const STREAMHUB_EPG_URL =
   'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg.json';
+/** This week's sports and fights from every channel's guide (built nightly). */
+export const STREAMHUB_SPORTS_URL =
+  'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/sports-week.json';
+/** Refresh settings, source health and audit history (built nightly). */
+export const STREAMHUB_STATUS_URL =
+  'https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/status.json';
 /** Week-long schedule, split in small files (see weekBucket). */
 export const streamhubEpgWeekUrl = (bucket: number) =>
   `https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/epg-week/${bucket}.json`;
@@ -140,6 +146,13 @@ export const SOURCES: PlaylistSource[] = [
     label: 'Russian-language (worldwide)',
     urls: [`${IPTV_ORG}/languages/rus.m3u`],
     tag: 'lang:rus',
+  },
+  {
+    // Links found by the daily GitHub discovery that passed its rules and the
+    // real playback check (scripts/discovery.ts). Re-checked every night.
+    id: 'discovered',
+    label: 'Daily discovery',
+    urls: ['https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/discovered.m3u'],
   },
   {
     id: 'free-tv',

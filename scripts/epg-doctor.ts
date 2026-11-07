@@ -16,6 +16,7 @@ import { createReadStream, readdirSync, rmSync } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import { Readable } from 'node:stream';
 import type { Catalog } from '../src/core/types';
+import { sportsWeek } from '../src/core/epg/sports';
 import { collectProgrammes, matchChannels, parseChannels, weekBucket, WEEK_BUCKETS, type Guide, type MatchTarget, type Programme } from '../src/core/epg/xmltv';
 // Guide files named per country by epgshare01. Unknown names simply report "unavailable".
 
@@ -231,6 +232,9 @@ async function main() {
   const buckets: Record<string, Programme[]>[] = Array.from({ length: WEEK_BUCKETS }, () => ({}));
   for (const [id, list] of Object.entries(week)) buckets[weekBucket(id)][id] = list;
   buckets.forEach((b, i) => writeFileSync(join(weekDir, `${i}.json`), JSON.stringify({ version: 1, builtAt, programs: b } satisfies Guide)));
+  // Sports & Fights for the whole week, from every channel's guide.
+  const sw = sportsWeek(catalog.channels, week, now);
+  writeFileSync(join(OUT, 'sports-week.json'), JSON.stringify(sw));
   const covered = Object.keys(week).length;
   const reach = Object.values(week).map((l) => (l[l.length - 1][1] - now) / 86400);
   const days = (min: number) => reach.filter((d) => d >= min).length;
@@ -238,6 +242,7 @@ async function main() {
     `# TV guide`, ``,
     `${covered} of ${catalog.channels.length} channels have a schedule.`,
     `Schedule reaches: 1+ day ahead ${days(1)} · 3+ days ${days(3)} · 6+ days ${days(6)} channels.`,
+    `Sports & fights this week: ${sw.events.length} events (${sw.events.filter((e) => e.kind === 'fight').length} fights).`,
     ``, ...log,
   ].join('\n');
   writeFileSync(join(OUT, 'epg-report.md'), report);
