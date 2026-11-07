@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, Play, Plus, X } from 'lucide-react-native';
-import { CastRow, FreeOnButtons, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
+import { CastRow, TmdbCredit } from '../components/MetaBlocks';
 import type { Show } from '../core/shows/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { Button, useFocusRing } from '../ui/primitives';
@@ -51,7 +51,6 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
                 {[show.year, show.source === 'free' ? (show.seasons ? `${show.seasons} season${show.seasons > 1 ? 's' : ''}` : null) : `${show.episodes.length} episodes`, show.genres.join(' · '), show.language, show.country].filter(Boolean).join('   ')}
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-                {show.source === 'free' ? <FreeOnButtons links={show.freeOn} title={show.title} preferredFocus /> : null}
                 {show.episodes.length ? <Button
                   variant="primary"
                   label={resume >= 0 ? `Resume episode ${resume + 1}` : 'Play episode 1'}
@@ -67,7 +66,6 @@ export function ShowDetail({ show, onPlay, onClose }: Props) {
               </View>
               {show.description ? <Text style={styles.desc} numberOfLines={4}>{show.description}</Text> : null}
               {show.castPhotos?.length ? <CastRow cast={show.castPhotos} /> : show.cast?.length ? <Text style={styles.meta}>Starring {show.cast.slice(0, 5).join(', ')}</Text> : null}
-              {show.source !== 'free' ? <WhereToWatch watch={show.watch} /> : null}
               {show.tmdbId ? <TmdbCredit /> : null}
               {seasons.length > 1 ? (
                 <View style={styles.seasons}>

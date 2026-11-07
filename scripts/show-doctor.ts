@@ -121,7 +121,7 @@ async function main() {
   console.log(OMDB_KEY ? `series ratings looked up: ${rated}` : 'series ratings: skipped (no OMDB_API_KEY secret)');
 
   // Keep free-to-stream series (fresh-doctor maintains them). Nothing from YouTube is kept.
-  const yt = (prev?.shows ?? []).filter((s) => s.source === 'free');
+  const yt: Show[] = []; // only series that play inside StreamHub
   const catalog: ShowCatalog = { version: 1, builtAt: now, shows: [...list, ...yt] };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'shows.json'), JSON.stringify(catalog));

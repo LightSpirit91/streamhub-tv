@@ -1,8 +1,8 @@
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, ExternalLink, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
-import { CastRow, FreeOnButtons, TmdbCredit, WhereToWatch } from '../components/MetaBlocks';
+import { Check, Play, Plus, RotateCcw, Star, X } from 'lucide-react-native';
+import { CastRow, TmdbCredit } from '../components/MetaBlocks';
 import type { Movie } from '../core/movies/types';
 import { useStreamHub } from '../state/useStreamHub';
 import { Button } from '../ui/primitives';
@@ -24,7 +24,6 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
   const toggle = useStreamHub((s) => s.toggleMovie);
   const resumeAt = useStreamHub((s) => s.movieProgress[movie.id] ?? 0);
   const fmt = (s: number) => `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)}h ` : ''}${Math.floor((s % 3600) / 60)}m`;
-  const canOpenLinks = !Platform.isTV;
 
   const facts: [string, string | undefined][] = [
     ['Director', movie.director?.join(', ')],
@@ -66,7 +65,6 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
             </View>
 
             <View style={styles.actions}>
-              {movie.source === 'free' ? <FreeOnButtons links={movie.freeOn} title={movie.title} preferredFocus /> : null}
               {movie.source !== 'free' ? <Button
                 variant="primary"
                 label={resumeAt > 60 ? `Resume from ${fmt(resumeAt)}` : 'Play'}
@@ -98,33 +96,8 @@ export function MovieDetail({ movie, onPlay, onClose }: Props) {
             </View>
 
             <CastRow cast={movie.castPhotos} />
-            {movie.source !== 'free' ? <WhereToWatch watch={movie.watch} /> : null}
-            {canOpenLinks && (movie.imdbId || movie.wikipedia) ? (
-              <View style={styles.links}>
-                {movie.imdbId ? (
-                  <Button
-                    variant="ghost"
-                    label="View on IMDb"
-                    icon={<ExternalLink size={15} color={colors.textDim} />}
-                    textStyle={{ color: colors.textDim }}
-                    onPress={() => Linking.openURL(`https://www.imdb.com/title/${movie.imdbId}/`)}
-                  />
-                ) : null}
-                {movie.wikipedia ? (
-                  <Button
-                    variant="ghost"
-                    label="Wikipedia"
-                    icon={<ExternalLink size={15} color={colors.textDim} />}
-                    textStyle={{ color: colors.textDim }}
-                    onPress={() => Linking.openURL(movie.wikipedia!)}
-                  />
-                ) : null}
-              </View>
-            ) : null}
             <Text style={styles.source}>
-              {movie.source === 'free'
-                ? `Streams free${movie.freeOn?.some((l) => l.type === 'ads') ? ' with ads' : ''} in Canada; opens on ${movie.freeOn?.map((l) => l.name).join(' / ') ?? 'the service'}.`
-                : 'Free from the Internet Archive.'}{movie.source !== 'free' ? ' Credits from Wikidata' : ''}{movie.imdbRating ? `${movie.source === 'free' ? ' Rating' : ', rating'} from IMDb` : ''}.
+              Free from the Internet Archive. Credits from Wikidata{movie.imdbRating ? ', rating from IMDb' : ''}.
             </Text>
             {movie.tmdbId ? <TmdbCredit /> : null}
           </View>

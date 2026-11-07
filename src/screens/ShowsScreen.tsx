@@ -42,7 +42,6 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
   const fresh = useMemo(() => shows.filter((s) => (s.addedAt ?? 0) > Date.now() - 14 * 86_400_000).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)).slice(0, 30), [shows]);
   // Newest first: series with the latest episodes / premieres.
   const newest = useMemo(() => shows.filter((s) => s.releaseDate).sort(byNewest).slice(0, 40), [shows]);
-  const popularFree = useMemo(() => shows.filter((s) => s.source === 'free').slice(0, 30), [shows]);
   const world = useMemo(
     () => WORLD_ROWS.map((r) => ({ ...r, list: shows.filter((s) => s.language === r.language) })).filter((r) => r.list.length),
     [shows],
@@ -110,7 +109,6 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
       <Row title="Continue Watching" data={watching} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       <Row title="Newest Episodes & Series" subtitle="latest first" accent={colors.coral} data={newest} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       <Row title="Just Added" accent={colors.ok} data={fresh} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
-      <Row title="Popular Free Series Right Now" subtitle="Tubi, Pluto TV, Roku and more" accent={colors.gold} data={popularFree} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       <Row title="Most Watched Series" accent={colors.gold} data={shows.slice(0, 30)} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       {world.map((r) => (
         <Row key={r.language} title={r.title.replace('Cinema', 'TV')} subtitle={`${r.list.length}`} data={r.list.slice(0, 30)} keyOf={(s) => s.id} gutter={L.gutter} render={card} onSeeAll={() => setLang(r.language)} />
@@ -119,7 +117,7 @@ export function ShowsScreen({ onOpen, onPlay }: Props) {
         <Row key={g} title={g} subtitle={`${list.length}`} data={list.slice(0, 30)} keyOf={(s) => s.id} gutter={L.gutter} render={card} />
       ))}
       <Text style={[styles.note, { marginHorizontal: L.gutter }]}>
-        {shows.length} series, {shows.reduce((n, s) => n + s.episodes.length, 0).toLocaleString()} episodes. The newest American and Canadian series streaming free in Canada (they open on Tubi, Pluto TV, CBC Gem and others) and classic public-domain TV.
+        {shows.length} series, {shows.reduce((n, s) => n + s.episodes.length, 0).toLocaleString()} episodes. Every episode plays right here in StreamHub: classic public-domain TV.
       </Text>
     </ScrollView>
   );

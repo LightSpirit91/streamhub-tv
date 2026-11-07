@@ -102,7 +102,8 @@ const DAY = 86_400_000;
 const clean = (list: Movie[]) =>
   list
     // Nothing from YouTube is offered.
-    .filter((m) => m.source !== 'youtube' && archiveAllowed(m) && isWatchable({ title: m.title, description: m.description }))
+    // Only titles that play inside StreamHub: nothing that sends you to another website.
+    .filter((m) => m.source === 'archive' && archiveAllowed(m) && isWatchable({ title: m.title, description: m.description }))
     // Free-elsewhere titles: links rebuilt with today's rules (paid / blocked services dropped).
     .map((m) => (m.source === 'free' ? { ...m, freeOn: currentFreeLinks(m) } : m))
     .filter((m) => m.source !== 'free' || (m.freeOn?.length && northAmerican(m)))
@@ -140,7 +141,7 @@ async function loadMoviesRaw(force: boolean): Promise<Movie[]> {
 /** Nothing from YouTube is offered. */
 const cleanShows = (list: Show[]) =>
   list
-    .filter((x) => x.source !== 'youtube' && isWatchable({ title: x.title, description: x.description }))
+    .filter((x) => x.source === 'archive' && x.episodes.length > 0 && isWatchable({ title: x.title, description: x.description }))
     .map((x) => (x.source === 'free' ? { ...x, freeOn: currentFreeLinks(x) } : x))
     .filter((x) => x.source !== 'free' || (x.freeOn?.length && northAmerican(x)))
     .map((x) => (libraryOnly(x.freeOn) ? { ...x, popularity: Math.round(x.popularity / 4) } : x))

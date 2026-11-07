@@ -92,7 +92,6 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
   }, [movies]);
   // Newest first: the latest releases, then what's popular among recent free titles.
   const newest = useMemo(() => movies.filter((m) => m.year).sort(byNewest).slice(0, 40), [movies]);
-  const popularFree = useMemo(() => movies.filter((m) => m.source === 'free').slice(0, 30), [movies]);
   const thisYear = new Date().getFullYear();
   const topRated = useMemo(
     () => movies.filter((m) => (m.imdbRating ?? 0) >= 7 && (m.imdbVotes ?? 0) >= 1000).sort((a, b) => (b.imdbRating ?? 0) - (a.imdbRating ?? 0)).slice(0, 40),
@@ -244,7 +243,6 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
       <Row title="Continue Watching" data={cont} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       <Row title="My Movies" data={mine} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       <Row title="New Releases" subtitle="latest first" accent={colors.coral} data={newest} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => { setSort('newest'); setFilter({ kind: 'all' }); }} />
-      <Row title="Popular Free Movies Right Now" subtitle="Tubi, Pluto TV, Roku and more" accent={colors.gold} data={popularFree} keyOf={(m) => m.id} gutter={L.gutter} render={card} />
       <Row
         title="Top 10 on StreamHub"
         accent={colors.gold}
@@ -287,7 +285,7 @@ export function MoviesScreen({ onOpen, onPlay, onUpcoming }: Props) {
         <Row key={d} title={`The ${d}s`} subtitle={`${list.length}`} data={list.slice(0, 30)} keyOf={(m) => m.id} gutter={L.gutter} render={card} onSeeAll={() => setFilter({ kind: 'decade', value: d })} />
       ))}
       <Text style={[styles.note, { marginHorizontal: L.gutter }]}>
-        {movies.length.toLocaleString()} films. The newest American and Canadian movies streaming free in Canada (they open on Tubi, Pluto TV, CBC Gem and others) and public-domain classics. New releases are added every night.
+        {movies.length.toLocaleString()} films. Every one plays right here in StreamHub: free, public-domain and openly licensed films. New releases are added every night.
       </Text>
     </ScrollView>
   );

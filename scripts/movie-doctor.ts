@@ -89,8 +89,8 @@ async function main() {
   for (const m of previous) if (m.addedAt && (stamps.get(m.addedAt) ?? 0) > 300) delete m.addedAt;
   // "New" rows show new films only: older titles never carry a new-arrival date.
   for (const m of previous) if (m.addedAt && m.source !== 'free' && (m.year ?? 0) < MIN_NEW_MOVIE_YEAR) delete m.addedAt;
-  // Nothing from YouTube is kept.
-  const library = new Map(previous.filter((m) => m.source !== 'youtube').map((m) => [m.id, m]));
+  // Only films that play inside StreamHub are kept (no YouTube, no free-elsewhere titles).
+  const library = new Map(previous.filter((m) => m.source === 'archive').map((m) => [m.id, m]));
   console.log(`previous library: ${previous.length}`);
 
   const [popular, newest] = await Promise.all([search('downloads desc', LIMIT), search('addeddate desc', 800)]);
