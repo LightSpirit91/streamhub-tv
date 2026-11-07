@@ -64,7 +64,9 @@ async function probe(s: Stream): Promise<Verdict> {
       const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${id}`, { signal: ctrl.signal });
       return res.ok ? 'ok' : res.status === 429 ? 'timeout' : 'dead';
     }
-    const res = await fetch(s.url, { signal: ctrl.signal, headers: s.headers, redirect: 'follow' });
+    const res = await fetch(s.url, { signal: ctrl.signal, headers: { Origin: 'https://lightspirit91.github.io', ...(s.headers ?? {}) }, redirect: 'follow' });
+    // Browsers other than Safari can only play streams whose server allows other websites.
+    s.cors = !!res.headers.get('access-control-allow-origin');
     if (res.status === 403 || res.status === 451) return 'locked';
     if (!res.ok) return 'dead';
     if (s.format !== 'hls') return 'ok';

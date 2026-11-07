@@ -53,6 +53,11 @@ export interface Stream {
   source: string;
   /** Precomputed rank. Higher plays first. Health adjusts it at runtime. */
   score: number;
+  /**
+   * false = the server doesn't let other websites load it (no CORS), so
+   * Chrome / Edge / Firefox can't play it on the web. Safari and the apps can.
+   */
+  cors?: boolean;
 }
 
 export interface Channel {

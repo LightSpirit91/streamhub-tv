@@ -389,3 +389,18 @@ describe('guide matching across countries', () => {
     expect(matchChannels([ruAlt], [{ id: '77', names: ['Первый канал'] }], 'RU').get('channelone.ru')).toBe('77');
   });
 });
+
+describe('streams the browser may not load (no CORS)', () => {
+  it('Chrome plays allowed backups first; Safari keeps the order; channels stay listed', async () => {
+    const { channelsForDevice, corsBlocked } = await import('../platform/compat');
+    const st = (url: string, score: number, cors?: boolean) => ({ url, height: 720, geoBlocked: false, notAlwaysOn: false, trust: 'official' as const, format: 'hls' as const, source: 's', score, cors });
+    const ntv = { id: 'ntv.ru', name: 'NTV', categories: [], hubs: [], popularity: 0, bestHeight: 720, search: '', streams: [st('https://cdn.ntv.ru/a.m3u8', 100, false), st('https://mirror/b.m3u8', 60, true)] };
+    const vitrina = { ...ntv, id: 'ntvvitrina.ru', streams: [st('https://cdn.ntv.ru/vitrina/index.m3u8', 100, false)] };
+    const chrome = { kind: 'web' as const, secureContext: true, nativeHls: false, mse: true };
+    const safari = { kind: 'web' as const, secureContext: true, nativeHls: true, mse: true };
+    const [c1, c2] = channelsForDevice([ntv, vitrina], chrome);
+    expect([...c1.streams].sort((a, b) => b.score - a.score)[0].url).toBe('https://mirror/b.m3u8');
+    expect(c2.streams.every((s) => corsBlocked(s, chrome))).toBe(true); // still listed; the player says "open in Safari"
+    expect(channelsForDevice([ntv], safari)[0].streams[0].score).toBe(100);
+  });
+});

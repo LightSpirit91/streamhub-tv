@@ -15,6 +15,10 @@ import { overlayOpen, useUi } from '../state/ui';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
+import { corsBlocked } from '../core/platform/compat';
+import { detectDevice } from '../services/device';
+
+const DEVICE = detectDevice();
 import StreamVideo from './MediaView';
 import { airPlaySupported, castMedia, connectCast, remote, stopCasting, useCast, useCastStore } from './cast/useCast';
 import AirPlayNative from './cast/AirPlayNative';
@@ -543,7 +547,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           </Pressable>
         </View>
       ) : state.kind !== 'playing' ? (
-        <StatusOverlay state={state} title={title} sources={streams.length} live={live} small={short} />
+        <StatusOverlay state={state} title={title} sources={streams.length} live={live} small={short} safariOnly={streams.length > 0 && streams.every((x) => corsBlocked(x, DEVICE))} />
       ) : null}
 
       {!casting && sideCues ? <SubtitleOverlay cues={sideCues} time={time.cur} rtl={SUB_LANGS.find((l) => l.code === subLang)?.rtl} raised={chrome} narrow={narrow} /> : null}
@@ -651,7 +655,7 @@ function Scrubber({ cur, dur, onSeek }: { cur: number; dur: number; onSeek(t: nu
   );
 }
 
-function StatusOverlay({ state, title, sources, live, small }: { state: FailoverState | { kind: 'loading' }; title: string; sources: number; live: boolean; small?: boolean }) {
+function StatusOverlay({ state, title, sources, live, small, safariOnly }: { state: FailoverState | { kind: 'loading' }; title: string; sources: number; live: boolean; small?: boolean; safariOnly?: boolean }) {
   let headline = live ? 'Tuning in' : 'Loading';
   let detail = title;
   if (state.kind === 'retrying') {
@@ -660,6 +664,11 @@ function StatusOverlay({ state, title, sources, live, small }: { state: Failover
   } else if (state.kind === 'switching') {
     headline = 'Channel Offline - Retrying...';
     detail = `Switching to backup source ${state.to + 1} of ${sources}`;
+  }
+  if (safariOnly && state.kind !== 'loading') {
+    // The channel's own server refuses to play inside other websites in Chrome / Edge / Firefox.
+    headline = 'Open this channel in Safari';
+    detail = 'This broadcaster only allows its stream inside other websites in Safari. Open StreamHub in Safari on your Mac or iPhone (or use the Fire TV app) to watch it.';
   } else if (state.kind === 'offline') {
     headline = live ? 'Channel Offline - Retrying...' : 'This film is unavailable right now';
     detail = `${sources > 1 ? `All ${sources} sources are` : 'The source is'} down. Trying again in ${Math.round(state.nextRoundInMs / 1000)}s.${live ? ' Press the down arrow for the next channel.' : ''}`;

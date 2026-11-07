@@ -43,14 +43,24 @@ export function canPlay(s: Stream, env: DeviceEnv): boolean {
   }
 }
 
-/** Returns channels with only playable streams; drops channels left empty. */
+/** Web without native HLS (Chrome, Edge, Firefox): the stream's server must allow other websites. */
+export const corsBlocked = (s: Stream, env: DeviceEnv) => env.kind === 'web' && !env.nativeHls && s.format === 'hls' && s.cors === false;
+
+/**
+ * Returns channels with only playable streams; drops channels left empty.
+ * On Chrome / Edge / Firefox, streams whose server refuses other websites go
+ * to the end of the list (backups that allow it play first). A channel with
+ * only such streams stays listed: the player explains to open it in Safari.
+ */
 export function channelsForDevice(channels: Channel[], env: DeviceEnv): Channel[] {
   if (env.kind === 'android' || env.kind === 'android-tv') return channels;
   const out: Channel[] = [];
   for (const ch of channels) {
-    const streams = ch.streams.filter((s) => canPlay(s, env));
+    let streams = ch.streams.filter((s) => canPlay(s, env));
     if (!streams.length) continue;
-    out.push(streams.length === ch.streams.length ? ch : { ...ch, streams });
+    // Lower their rank (the health ranking re-sorts by score later), so allowed backups play first.
+    if (streams.some((s) => corsBlocked(s, env))) streams = streams.map((s) => (corsBlocked(s, env) ? { ...s, score: s.score - 200 } : s));
+    out.push(streams.length === ch.streams.length && streams.every((s, i) => s === ch.streams[i]) ? ch : { ...ch, streams });
   }
   return out;
 }
