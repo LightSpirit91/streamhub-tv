@@ -22,6 +22,7 @@ import {
 } from '../src/core/movies/archive';
 import { creditsQuery, parseCredits } from '../src/core/movies/wikidata';
 import { subFilesOf } from '../src/core/subtitles';
+import { checkFiles } from './lib/playable';
 import { archiveAllowed, MIN_NEW_MOVIE_YEAR, newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
@@ -219,6 +220,17 @@ async function main() {
     if (!prev) seen.set(key, m);
     else if (!prev.year && m.year) prev.year = m.year;
   }
+  // Only films that actually play: drop those whose video file is gone from the Internet Archive.
+  const verdicts = await checkFiles([...seen.values()].map((m) => m.url));
+  let gone = 0;
+  for (const [k, m] of seen) {
+    if (verdicts.get(m.url) === 'gone') {
+      seen.delete(k);
+      gone++;
+    }
+  }
+  const unknown = [...verdicts.values()].filter((v) => v === 'unknown').length;
+  console.log(`playable check: ${gone} films removed (file gone), ${unknown} unclear (kept)`);
   const movies = [...seen.values()];
   const catalog: MovieCatalog = { version: 1, builtAt: now, movies };
   mkdirSync(OUT, { recursive: true });
@@ -232,7 +244,7 @@ async function main() {
   const report = [
     `# Movie library`,
     ``,
-    `- Films: **${movies.length}** (${added} new tonight)`,
+    `- Films: **${movies.length}** (${added} new tonight, ${gone} removed: video file gone)`,
     `- With cast/director: ${movies.filter((m) => m.cast?.length || m.director?.length).length}`,
     `- With IMDb id: ${movies.filter((m) => m.imdbId).length} · with IMDb rating: ${movies.filter((m) => m.imdbRating).length}`,
     `- Subtitles: ${['en', 'es', 'ru', 'he'].map((l) => `${l} ${movies.filter((m) => m.subs?.some((s) => s.lang === l)).length}`).join(' · ')} (checked ${movies.filter((m) => m.subsCheckedAt).length} of ${movies.filter((m) => m.source === 'archive').length})`,

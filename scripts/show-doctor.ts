@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { metadataUrl, type ArchiveFile, type SearchDoc } from '../src/core/movies/archive';
 import { isClassicShow, itemToShowParts, showSearchUrl } from '../src/core/shows/archive';
 import type { Episode, Show, ShowCatalog } from '../src/core/shows/types';
+import { checkFiles } from './lib/playable';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -99,6 +100,15 @@ async function main() {
 
   const order = (a: Episode, b: Episode) =>
     (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0) || a.title.localeCompare(b.title, undefined, { numeric: true });
+  // Only episodes that actually play: drop those whose video file is gone.
+  const verdicts = await checkFiles([...shows.values()].flatMap((s) => s.episodes.map((e) => e.url)));
+  let goneEps = 0;
+  for (const s of shows.values()) {
+    const before = s.episodes.length;
+    s.episodes = s.episodes.filter((e) => verdicts.get(e.url) !== 'gone');
+    goneEps += before - s.episodes.length;
+  }
+  console.log(`playable check: ${goneEps} episodes removed (file gone)`);
   const list = [...shows.values()]
     .filter((s) => s.episodes.length >= 2)
     .map((s) => ({ ...s, episodes: s.episodes.sort(order) }))

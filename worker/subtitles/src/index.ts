@@ -37,7 +37,7 @@ export function errorBody(e: unknown): [Record<string, unknown>, number, string]
       const code = i.blocked ? `login-blocked-${i.status}` : i.status ? `auth-${i.status}` : 'auth-cooldown';
       return [{ error: 'unavailable', code }, 503, code];
     }
-    const code = `${i.stage ?? 'upstream'}-${i.status}`;
+    const code = `${i.stage ?? 'upstream'}-${i.status}${i.html === undefined ? '' : i.html ? '-firewall' : '-api'}`;
     return [{ error: 'unavailable', code }, 502, code];
   }
   const name = e instanceof Error ? e.name.replace(/[^A-Za-z]/g, '').slice(0, 40) || 'Error' : 'unknown';

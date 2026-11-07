@@ -45,7 +45,7 @@ export type ApiError =
   | { kind: 'quota'; resetTime?: string } // today's free downloads used up
   | { kind: 'busy' } // rate limited
   | { kind: 'notfound' }
-  | { kind: 'upstream'; status: number; stage?: Stage };
+  | { kind: 'upstream'; status: number; stage?: Stage; html?: boolean };
 
 /** Where a failure happened. Safe to log: it never contains secrets or response data. */
 export type Stage = 'login-network' | 'login-json' | 'search-network' | 'search-json' | 'search-shape' | 'download-network' | 'download-json' | 'file-network';
@@ -216,7 +216,8 @@ export class OpenSubtitles {
   async search(q: SearchQuery): Promise<SubResult[]> {
     if (!imdbNum(q.imdbId) || !LANGS.includes(q.lang)) throw new OsError({ kind: 'notfound' });
     const res = await this.anonymous(searchPath(q));
-    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-network' });
+    // html = a firewall page answered (blocked), not the API (JSON: e.g. API key refused).
+    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-network', html: !(res.headers.get('content-type') ?? '').includes('json') });
     const j = await body<{ data?: unknown }>(res, 'search-json');
     if (j.data != null && !Array.isArray(j.data)) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-shape' });
     // Skip any entry missing the fields we rely on instead of failing the whole search.
