@@ -59,11 +59,22 @@ async function guideSources(): Promise<string[]> {
  * Channels come first in XMLTV; we match them, then filter programmes as
  * they stream past.
  */
+/** Which country a guide file covers, from its name (undefined = mixed / unknown). */
+export function guideCountry(url: string): string | undefined {
+  const f = url.split('/').pop() ?? '';
+  const m = /^epg_ripper_([A-Z]{2})(?:\d|_)/.exec(f) ?? /^epg_([A-Z]{2})\.xml/.exec(f);
+  if (m) return m[1] === 'GB' ? 'UK' : m[1];
+  const mjh = /i\.mjh\.nz\/(PlutoTV|Roku)\/([a-z]{2}|all)\.xml/.exec(url);
+  if (mjh) return mjh[2] === 'all' ? 'US' : mjh[2].toUpperCase();
+  return undefined;
+}
+
 export async function processSource(
   url: string,
   targets: MatchTarget[],
   from: number,
   to: number,
+  country?: string,
 ): Promise<{ map: Map<string, string>; byXml: Map<string, Programme[]>; xmlChannels?: number } | { error: string }> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 900_000);
@@ -79,7 +90,7 @@ export async function processSource(
       let all = '';
       for await (const chunk of stream as AsyncIterable<string | Buffer>) all += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
       const xmlCh = parseChannels(all);
-      const map = matchChannels(targets, xmlCh);
+      const map = matchChannels(targets, xmlCh, country);
       const byXml = new Map<string, Programme[]>();
       if (map.size) collectProgrammes(all, new Set(map.values()), from, to, byXml);
       return { map, byXml, xmlChannels: xmlCh.length };
@@ -107,7 +118,7 @@ export async function processSource(
         buf = buf.slice(p);
         const xmlCh = parseChannels(channelsXml);
         xmlChannels = xmlCh.length;
-        map = matchChannels(targets, xmlCh);
+        map = matchChannels(targets, xmlCh, country);
         channelsXml = '';
         if (!map.size) return { map, byXml, xmlChannels };
         wanted = new Set(map.values());
@@ -120,7 +131,7 @@ export async function processSource(
     if (!map) {
       const xmlCh = parseChannels(channelsXml + buf);
       xmlChannels = xmlCh.length;
-      map = matchChannels(targets, xmlCh);
+      map = matchChannels(targets, xmlCh, country);
     }
     return { map, byXml, xmlChannels };
   } catch (e) {
@@ -145,6 +156,7 @@ async function main() {
   const targets: MatchTarget[] = catalog.channels.map((c) => ({
     id: c.id,
     name: c.name,
+    altNames: c.altNames,
     country: c.country,
     plutoId: c.streams.map((s) => /plu-([0-9a-f]{24})/.exec(s.url)?.[1]).find(Boolean),
   }));
@@ -163,7 +175,7 @@ async function main() {
   const reachOf = (l: Programme[]) => l[l.length - 1][1];
   for (const url of await guideSources()) {
     const name = url.split('/').slice(-2).join('/');
-    const got0 = await processSource(url, targets, from, to);
+    const got0 = await processSource(url, targets, from, to, guideCountry(url));
     if ('error' in got0) {
       log.push(`- ${name}: unavailable (${got0.error})`);
       console.log(log[log.length - 1]);

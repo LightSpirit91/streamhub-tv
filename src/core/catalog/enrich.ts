@@ -97,6 +97,8 @@ export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLo
       nLogos++;
     } else if (logo) nLogos++;
     if (d.network) ch.network = d.network;
+    const alts = (d.alt_names ?? '').split(';').map((x) => x.trim()).filter((x) => x && x !== ch.name);
+    if (alts.length) ch.altNames = [...new Set(alts)].slice(0, 5);
     const cats = (d.categories ?? '').split(';').filter(Boolean);
     for (const c of cats) if (!ch.categories.includes(c)) ch.categories.push(c);
     ch.tagline = tagline(cats.length ? cats : ch.categories, d.network, ch.country ?? d.country);

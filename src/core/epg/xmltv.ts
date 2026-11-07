@@ -98,12 +98,23 @@ export const normKey = (s: string) =>
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/@.*$/, '')
-    .replace(/\b(hd|sd|fhd|uhd|4k|tv|channel)\b/g, '')
+    .replace(/\b(hd|sd|fhd|uhd|4k|tv)\b/g, '')
     .replace(/[^a-z0-9Ѐ-ӿ֐-׿]+/g, '');
+
+/** Country suffix of a guide id: "Kan11.il@SD" -> "il", "One.us" -> "us". */
+export function countrySuffix(xmlId: string): string | undefined {
+  return /\.([a-z]{2})(?:@|$)/i.exec(xmlId)?.[1]?.toLowerCase();
+}
+const sameCountry = (a: string, b: string) => {
+  const n = (x: string) => (x === 'gb' ? 'uk' : x);
+  return n(a) === n(b);
+};
 
 export interface MatchTarget {
   id: string;
   name: string;
+  /** Other names ("Первый канал") tried after the main one. */
+  altNames?: string[];
   country?: string;
   /** Pluto TV channel id taken from the stream URL, when present. */
   plutoId?: string;
@@ -114,8 +125,13 @@ export interface MatchTarget {
  * 1. Pluto id appears in the XMLTV id
  * 2. Same id once normalized ("Kan11.il@SD" ~ "kan11.il")
  * 3. Same display name, preferring a matching country suffix
+ *
+ * Name matches never cross countries: a guide known to be for one country
+ * (sourceCountry) or a guide id with a country suffix ("One.us") only
+ * matches channels of that country. ("Channel One" in Russia is not a US
+ * channel called "One".)
  */
-export function matchChannels(targets: MatchTarget[], xml: XmlChannel[]): Map<string, string> {
+export function matchChannels(targets: MatchTarget[], xml: XmlChannel[], sourceCountry?: string): Map<string, string> {
   const byId = new Map<string, string>();
   const byName = new Map<string, string[]>();
   const pluto = new Map<string, string>();
@@ -139,10 +155,22 @@ export function matchChannels(targets: MatchTarget[], xml: XmlChannel[]): Map<st
       out.set(t.id, direct);
       continue;
     }
-    const cands = byName.get(normKey(t.name)) ?? [];
-    if (!cands.length) continue;
     const cc = t.country?.toLowerCase();
-    const pick = (cc && cands.find((x) => new RegExp(`[._-]${cc}\\b`, 'i').test(x))) || (cands.length === 1 ? cands[0] : undefined);
+    const src = sourceCountry?.toLowerCase();
+    if (cc && src && !sameCountry(cc, src)) continue;
+    // Very short names ("one", "a") match too much: skipped. Other names are tried in turn.
+    let cands: string[] = [];
+    for (const n of [t.name, ...(t.altNames ?? [])]) {
+      const key = normKey(n);
+      if (key.length < 4) continue;
+      cands = (byName.get(key) ?? []).filter((x) => {
+        const suffix = countrySuffix(x);
+        return !cc || !suffix || sameCountry(cc, suffix);
+      });
+      if (cands.length) break;
+    }
+    if (!cands.length) continue;
+    const pick = (cc && cands.find((x) => countrySuffix(x) && sameCountry(cc, countrySuffix(x)!))) || (cands.length === 1 ? cands[0] : undefined);
     if (pick) out.set(t.id, pick);
   }
   return out;

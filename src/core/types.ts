@@ -67,6 +67,8 @@ export interface Channel {
   streams: Stream[];
   /** Short identifying line, e.g. "News · Pluto TV" or "Sports · USA". */
   tagline?: string;
+  /** Other names from the channel database (e.g. "Первый канал"): TV guide matching and search. */
+  altNames?: string[];
   /** A recent frame from the live stream (refreshed nightly). */
   thumb?: string;
   /** Broadcaster / network from the iptv-org database. */

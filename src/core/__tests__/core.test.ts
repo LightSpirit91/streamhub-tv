@@ -373,3 +373,19 @@ describe('week guide', () => {
     expect(splitDays(undefined, now)).toEqual([]);
   });
 });
+
+describe('guide matching across countries', () => {
+  it('never gives a Russian channel a US guide, and keeps "Channel One" apart from "One"', async () => {
+    const { matchChannels } = await import('../epg/xmltv');
+    const ru = { id: 'channelone.ru', name: 'Channel One', country: 'RU' };
+    const usXml = [{ id: 'One.us', names: ['Channel One'] }, { id: 'JeffersonsChannel', names: ['One'] }];
+    expect(matchChannels([ru], usXml, 'US').size).toBe(0); // US guide file
+    expect(matchChannels([ru], usXml).size).toBe(0); // unknown file, but the id says .us
+    const ruXml = [{ id: '1234', names: ['Channel One'] }];
+    expect(matchChannels([ru], ruXml, 'RU').get('channelone.ru')).toBe('1234');
+    expect(matchChannels([ru], [{ id: '9', names: ['One'] }], 'RU').size).toBe(0);
+    // Russian guide names: matched through the channel database's other names.
+    const ruAlt = { ...ru, altNames: ['Первый канал'] };
+    expect(matchChannels([ruAlt], [{ id: '77', names: ['Первый канал'] }], 'RU').get('channelone.ru')).toBe('77');
+  });
+});
