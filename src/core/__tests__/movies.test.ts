@@ -160,3 +160,14 @@ describe('north american titles', () => {
     expect(northAmerican({})).toBe(false);
   });
 });
+
+describe('archive license rule', () => {
+  it('keeps old public-domain films and licensed recent ones only', async () => {
+    const { archiveAllowed } = await import('../movies/types');
+    expect(archiveAllowed({ source: 'archive', year: 1946 })).toBe(true);
+    expect(archiveAllowed({ source: 'archive' })).toBe(true);
+    expect(archiveAllowed({ source: 'archive', year: 2014 })).toBe(false);
+    expect(archiveAllowed({ source: 'archive', year: 2014, license: 'http://creativecommons.org/licenses/by/4.0/' })).toBe(true);
+    expect(archiveAllowed({ source: 'free', year: 2026 })).toBe(true);
+  });
+});

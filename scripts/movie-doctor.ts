@@ -22,7 +22,7 @@ import {
 } from '../src/core/movies/archive';
 import { creditsQuery, parseCredits } from '../src/core/movies/wikidata';
 import { subFilesOf } from '../src/core/subtitles';
-import { MIN_NEW_MOVIE_YEAR, newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
+import { archiveAllowed, MIN_NEW_MOVIE_YEAR, newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
 const arg = (k: string, d: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -116,6 +116,7 @@ async function main() {
       // (Creative Commons / public domain) since they are not old enough to be
       // public domain by age.
       if (!m || !newEnough(m.year) || !openLicense(md.licenseurl)) return;
+      m.license = md.licenseurl as string;
       if (previous.length && newestIds.has(m.id)) m.addedAt = now; // genuinely new uploads only
       m.imdbId = imdbIdFrom(md['external-identifier']) ?? imdbIdFrom(md.imdb);
       m.minutes ??= runtimeMinutes(md.runtime as string | undefined);
@@ -130,11 +131,16 @@ async function main() {
   console.log(`new titles added: ${added}`);
 
   // Subtitle files (.srt / .vtt) shipped with films already in the library: 1,500 a night until all are checked.
-  const needSubs = [...library.values()].filter((m) => m.source === 'archive' && !m.subsCheckedAt).slice(0, 1500);
+  // Films dated 1990+ first: their license decides whether they stay.
+  const needSubs = [...library.values()]
+    .filter((m) => m.source === 'archive' && !m.subsCheckedAt)
+    .sort((a, b) => Number((b.year ?? 0) >= MIN_NEW_MOVIE_YEAR) - Number((a.year ?? 0) >= MIN_NEW_MOVIE_YEAR))
+    .slice(0, 1500);
   let withSubs = 0;
   await pool(needSubs, 24, async (m) => {
     try {
-      const meta = await json<{ files?: ArchiveFile[] }>(metadataUrl(m.id));
+      const meta = await json<{ files?: ArchiveFile[]; metadata?: Record<string, unknown> }>(metadataUrl(m.id));
+      if (openLicense(meta.metadata?.licenseurl)) m.license = meta.metadata!.licenseurl as string;
       m.subs = subFilesOf(meta.files ?? [], (n) => fileUrl(m.id, n), m.language);
       m.subsCheckedAt = now;
       if (m.subs.length) withSubs++;
@@ -143,6 +149,16 @@ async function main() {
     }
   });
   console.log(`subtitles: checked ${needSubs.length}, ${withSubs} have subtitle files`);
+
+  // Recent films without an open license are not free to share: drop them once checked.
+  let dropped = 0;
+  for (const [id, m] of library) {
+    if (m.source === 'archive' && m.subsCheckedAt && !archiveAllowed(m)) {
+      library.delete(id);
+      dropped++;
+    }
+  }
+  console.log(`dropped ${dropped} films dated ${MIN_NEW_MOVIE_YEAR}+ without an open license`);
 
   // Credits from Wikidata for titles that haven't been checked yet.
   const needCredits = [...library.values()].filter((m) => m.director === undefined);

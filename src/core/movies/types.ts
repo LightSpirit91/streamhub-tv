@@ -32,6 +32,8 @@ export interface Movie extends TmdbMeta {
   freeOn?: FreeLink[];
   /** Last time the free availability was checked (ms). */
   freeCheckedAt?: number;
+  /** Open license (Creative Commons / public-domain mark) of an Internet Archive film. */
+  license?: string;
   /** Subtitle files that ship with the film (English, Spanish, Russian, Hebrew). */
   subs?: SubFile[];
   subsCheckedAt?: number;
@@ -83,3 +85,10 @@ export function northAmerican(x: { origin?: string[]; country?: string }): boole
   if (x.origin?.length) return x.origin.some((c) => c === 'US' || c === 'CA');
   return /^(US|CA|USA|United States( of America)?|Canada)$/i.test(x.country ?? '');
 }
+
+/**
+ * Internet Archive films dated 1990 or later are only kept with an open
+ * license: anything that recent is under copyright unless the owner released it.
+ */
+export const archiveAllowed = (m: { source: string; year?: number; license?: string }): boolean =>
+  m.source !== 'archive' || !m.year || m.year < MIN_NEW_MOVIE_YEAR || !!m.license;

@@ -12,7 +12,7 @@ import type { Show, ShowCatalog } from '../core/shows/types';
 import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { genresFromTmdb } from '../core/movies/youtube';
-import { northAmerican } from '../core/movies/types';
+import { archiveAllowed, northAmerican } from '../core/movies/types';
 import type { SubChoice } from '../core/subtitles';
 import { currentFreeLinks, type FreeLink } from '../core/meta/tmdb';
 
@@ -102,13 +102,14 @@ const DAY = 86_400_000;
 const clean = (list: Movie[]) =>
   list
     // Nothing from YouTube is offered.
-    .filter((m) => m.source !== 'youtube' && isWatchable({ title: m.title, description: m.description }))
+    .filter((m) => m.source !== 'youtube' && archiveAllowed(m) && isWatchable({ title: m.title, description: m.description }))
     // Free-elsewhere titles: links rebuilt with today's rules (paid / blocked services dropped).
     .map((m) => (m.source === 'free' ? { ...m, freeOn: currentFreeLinks(m) } : m))
     .filter((m) => m.source !== 'free' || (m.freeOn?.length && northAmerican(m)))
     .map((m) => (libraryOnly(m.freeOn) ? { ...m, popularity: Math.round(m.popularity / 4) } : m))
     .map((m) => ({
       ...m,
+      year: m.year && m.year >= 1890 ? m.year : undefined, // a few uploads carry impossible years
       title: stripEmoji(m.title),
       genres: genresFromTmdb(m.tmdbGenres) ?? m.genres,
     }));
