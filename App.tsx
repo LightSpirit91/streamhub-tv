@@ -22,6 +22,7 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PlayerScreen, type PlayItem } from './src/player/PlayerScreen';
 import { BottomTabs, TopBar, type Tab } from './src/components/NavBar';
 import { Wordmark } from './src/components/Wordmark';
+import { QuickSearch } from './src/components/QuickSearch';
 import { colors, fonts } from './src/ui/theme';
 import { useLayout } from './src/ui/layout';
 import { initCast, useCast } from './src/player/cast/useCast';
@@ -145,7 +146,26 @@ export default function App() {
   return (
     <View style={styles.root}>
       <StatusBar style="light" hidden={!!playing} />
-      <TopBar tab={tab} onTab={(t) => { setTab(t); if (t !== 'live') setLiveHub(null); }} compact={L.compact} gutter={L.gutter} />
+      <TopBar
+        tab={tab}
+        onTab={(t) => { setTab(t); if (t !== 'live') setLiveHub(null); }}
+        compact={L.compact}
+        gutter={L.gutter}
+        search={
+          tab === 'search' ? null : (
+            <QuickSearch
+              compact={L.compact}
+              onChannel={(c) => playChannel(c, allChannels.filter((x) => x.hubs.some((h) => c.hubs.includes(h))))}
+              onMovie={setDetail}
+              onShow={setShowDetail}
+              onAll={(q) => {
+                useUi.getState().setSearchQuery(q);
+                setTab('search');
+              }}
+            />
+          )
+        }
+      />
       <View style={{ flex: 1 }}>{screen}</View>
       {!playing && castItem ? <NowOnTvBar onOpen={() => setPlaying(castItem)} /> : null}
       {!playing ? <ReminderBanner onWatch={(c) => playChannel(c, [c])} /> : null}

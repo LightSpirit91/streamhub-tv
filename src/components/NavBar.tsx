@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Clapperboard, Film, Heart, Home, Library, Search, Tv } from 'lucide-react-native';
 import { useStreamHub } from '../state/useStreamHub';
+import { useUi } from '../state/ui';
 import { useProfiles } from '../state/profiles';
 import { Avatar } from './Avatar';
 import { colors, fonts } from '../ui/theme';
@@ -25,11 +27,14 @@ interface Props {
   onTab(t: Tab): void;
   compact: boolean;
   gutter: number;
+  /** Search box with suggestions (QuickSearch). */
+  search?: ReactNode;
 }
 
-export function TopBar({ tab, onTab, compact, gutter }: Props) {
+export function TopBar({ tab, onTab, compact, gutter, search }: Props) {
+  const lifted = useUi((s) => s.searchOpen);
   return (
-    <View style={[styles.top, { paddingHorizontal: gutter }]}>
+    <View style={[styles.top, { paddingHorizontal: gutter }, compact && { gap: 10 }, lifted && { zIndex: 40 }]}>
       <Wordmark size={compact ? 18 : 20} />
       {!compact && (
         <View style={styles.tabs}>
@@ -38,9 +43,10 @@ export function TopBar({ tab, onTab, compact, gutter }: Props) {
           ))}
         </View>
       )}
-      <View style={{ flex: 1 }} />
+      {compact && search ? search : <View style={{ flex: 1 }} />}
+      {!compact ? search : null}
       <CastButton compact={compact} />
-      <ProfileChip />
+      <ProfileChip compact={compact} />
     </View>
   );
 }
@@ -55,16 +61,16 @@ function TopTab({ label, Icon, active, onPress }: { label: string; Icon: typeof 
   );
 }
 
-function ProfileChip() {
+function ProfileChip({ compact }: { compact?: boolean }) {
   const profile = useStreamHub((s) => s.profile);
   const signOut = useStreamHub((s) => s.signOut);
   const p = useProfiles((s) => s.profiles).find((x) => x.id === profile);
   const f = useFocusRing();
   if (!p) return null;
   return (
-    <Pressable onPress={signOut} {...f.handlers} style={[styles.chip, f.on && styles.tabFocus]} accessibilityLabel="Switch profile">
+    <Pressable onPress={signOut} {...f.handlers} style={[styles.chip, compact && { paddingRight: 4 }, f.on && styles.tabFocus]} accessibilityLabel="Switch profile">
       <Avatar profile={p} size={30} />
-      <Text style={styles.chipText}>{p.name}</Text>
+      {compact ? null : <Text style={styles.chipText}>{p.name}</Text>}
     </Pressable>
   );
 }
@@ -86,7 +92,7 @@ export function BottomTabs({ tab, onTab }: { tab: Tab; onTab(t: Tab): void }) {
 }
 
 const styles = StyleSheet.create({
-  top: { flexDirection: 'row', alignItems: 'center', gap: 28, paddingTop: 20, paddingBottom: 12 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 28,  paddingTop: 20, paddingBottom: 12 },
   tabs: { flexDirection: 'row', gap: 4 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, height: 38,

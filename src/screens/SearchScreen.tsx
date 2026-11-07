@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useUi } from '../state/ui';
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 import type { Channel } from '../core/types';
@@ -21,7 +22,11 @@ export function SearchScreen({ onPlay, onMovie }: Props) {
   const channels = useStreamHub((s) => s.channels);
   const movies = useStreamHub((s) => s.movies);
   const favorites = useStreamHub((s) => s.favorites);
-  const [q, setQ] = useState('');
+  const handed = useUi((s) => s.searchQuery);
+  const [q, setQ] = useState(handed);
+  useEffect(() => {
+    if (handed) setQ(handed);
+  }, [handed]);
 
   const results = useMemo(() => (q.trim() ? searchChannels(channels, q, 240) : []), [q, channels]);
   const movieHits = useMemo(() => {

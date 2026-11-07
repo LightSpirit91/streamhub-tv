@@ -78,6 +78,7 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
   const [sel, setSel] = useState(0);
   const [tuned, setTuned] = useState<Channel | undefined>(list[0]);
   const listRef = useRef<FlatList<Channel>>(null);
+  const wide = !L.compact && L.ff !== 'tablet';
   const tuneTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -91,11 +92,21 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
       const c = list[i];
       if (!c) return;
       setSel(i);
-      if (scroll) listRef.current?.scrollToIndex({ index: i, viewPosition: 0.4, animated: true });
+      if (scroll && wide) listRef.current?.scrollToIndex({ index: i, viewPosition: 0.4, animated: true });
       clearTimeout(tuneTimer.current);
       tuneTimer.current = setTimeout(() => setTuned(c), TUNE_DELAY);
     },
-    [list],
+    [list, wide],
+  );
+
+  const scrollY = useRef(0);
+  const headerH = useRef(0);
+  const pick = useCallback(
+    (i: number) => {
+      select(i, false);
+      if (!wide && scrollY.current > headerH.current * 0.6) listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    },
+    [select, wide],
   );
 
   // Keyboard surfing on Mac / PC.
@@ -124,7 +135,6 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
     return () => w.removeEventListener('keydown', onKey, true);
   }, [sel, list, select, onFullscreen]);
 
-  const wide = !L.compact && L.ff !== 'tablet';
   const current = list[sel];
   const now = useNow();
 
@@ -183,8 +193,8 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
     </View>
   );
 
-  return (
-    <View style={styles.root}>
+  const chips = (
+    <>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -210,13 +220,62 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
           <CountryChip key={cc} cc={cc} label={`${countryName(cc)} ${n.toLocaleString()}`} active={country === cc} onPress={() => setCountry(cc)} />
         ))}
       </ScrollView>
+    </>
+  );
+  const head = (
+    <Text style={styles.guideHead}>
+      {list.length.toLocaleString()} channels{Platform.OS === 'web' && wide ? '  ·  Use ↑ ↓ to surf, Enter for fullscreen' : ''}
+    </Text>
+  );
+  const renderRow = ({ item, index }: { item: Channel; index: number }) => (
+    <GuideRow
+      channel={item}
+      grid={wide}
+      number={numbers.get(item.id) ?? 0}
+      selected={index === sel}
+      favorite={favorites.includes(item.id)}
+      onSelect={() => pick(index)}
+      onOpen={() => (index === sel ? onFullscreen(item, list) : pick(index))}
+    />
+  );
+  const empty = <Text style={styles.empty}>Nothing here yet. Add channels to My List with the heart in the player.</Text>;
 
-      <View style={[styles.body, { paddingHorizontal: L.gutter }, wide ? { flexDirection: 'row' } : { flexDirection: 'column' }]}>
-        {!wide && preview}
-        <View style={[styles.guide, wide ? { width: Math.min(820, L.width * 0.56) } : { flex: 1 }]}>
-          <Text style={styles.guideHead}>
-            {list.length.toLocaleString()} channels{Platform.OS === 'web' && wide ? '  ·  Use ↑ ↓ to surf, Enter for fullscreen' : ''}
-          </Text>
+  if (!wide) {
+    // Phone / narrow: one list for the whole page, so a swipe anywhere scrolls
+    // (chips and the preview scroll away with it).
+    return (
+      <View style={styles.root}>
+        <FlatList
+          ref={listRef}
+          data={list}
+          keyExtractor={(c) => c.id}
+          initialNumToRender={14}
+          windowSize={9}
+          onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={64}
+          ListHeaderComponent={
+            <View onLayout={(e) => (headerH.current = e.nativeEvent.layout.height)}>
+              {chips}
+              <View style={{ paddingHorizontal: L.gutter }}>
+                {preview}
+                {head}
+              </View>
+            </View>
+          }
+          renderItem={({ item, index }) => <View style={{ paddingHorizontal: L.gutter }}>{renderRow({ item, index })}</View>}
+          ListEmptyComponent={empty}
+          contentContainerStyle={{ paddingBottom: 16 }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      {chips}
+      <View style={[styles.body, { paddingHorizontal: L.gutter, flexDirection: 'row' }]}>
+        <View style={[styles.guide, { width: Math.min(820, L.width * 0.56) }]}>
+          {head}
           <FlatList
             ref={listRef}
             data={list}
@@ -224,21 +283,11 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
             getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
             initialNumToRender={14}
             windowSize={9}
-            renderItem={({ item, index }) => (
-              <GuideRow
-                channel={item}
-                grid={wide}
-                number={numbers.get(item.id) ?? 0}
-                selected={index === sel}
-                favorite={favorites.includes(item.id)}
-                onSelect={() => select(index, false)}
-                onOpen={() => (index === sel ? onFullscreen(item, list) : select(index, false))}
-              />
-            )}
-            ListEmptyComponent={<Text style={styles.empty}>Nothing here yet. Add channels to My List with the heart in the player.</Text>}
+            renderItem={renderRow}
+            ListEmptyComponent={empty}
           />
         </View>
-        {wide && preview}
+        {preview}
       </View>
     </View>
   );

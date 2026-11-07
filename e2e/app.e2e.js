@@ -21,6 +21,14 @@ async function run(b, name, viewport) {
   await p.goto(BASE);
   await step('profile picker', async () => { await p.waitForSelector("text=Who's watching?", { timeout: 60000 }); await p.click('text=My Love'); });
   await step('home loads', async () => { await p.waitForSelector('text=Watch live', { timeout: 60000 }); });
+  await step('Live TV page scrolls from anywhere (phone)', async () => {
+    if (viewport.width > 600) return;
+    await tab('Live TV'); await p.waitForTimeout(1500);
+    await p.mouse.move(viewport.width / 2, 400); await p.mouse.wheel(0, 1200); await p.waitForTimeout(600);
+    const moved = await p.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.scrollTop > 500));
+    if (!moved) throw new Error('page did not scroll');
+    await tab('Home'); await p.waitForTimeout(800);
+  });
   await step('live channel opens and closes', async () => {
     await p.click('text=Watch live'); await p.waitForTimeout(1500);
     await p.waitForSelector('[aria-label="Back"]'); await p.click('[aria-label="Back"]'); await p.waitForTimeout(500);
@@ -92,6 +100,13 @@ async function run(b, name, viewport) {
   });
   await step('My List shows the saved channel', async () => { await tab('My List'); await p.waitForSelector('text=Favorite Channels', { timeout: 5000 }); });
   await step('Search channels and movies', async () => { await tab('Search'); await p.fill('input', 'kan'); await p.waitForTimeout(800); await p.waitForSelector('text=channel', { timeout: 5000 }); });
+  await step('top search box suggests as you type and opens a channel', async () => {
+    await tab('Home'); await p.waitForTimeout(600);
+    await p.fill('[aria-label="Search channels and movies"]', 'kan');
+    await p.waitForSelector('[aria-label="Search suggestions"]', { timeout: 5000 });
+    await p.locator('[aria-label="Search suggestions"] [aria-label^="Kan 11"]').first().click();
+    await p.waitForSelector('[aria-label="Back"]', { timeout: 5000 }); await p.click('[aria-label="Back"]'); await p.waitForTimeout(400);
+  });
   await step('switch profile keeps lists separate', async () => {
     await p.click('[aria-label="Switch profile"]'); await p.click('text=Arkadi'); await p.waitForSelector('text=Watch live', { timeout: 20000 });
     await tab('My List'); await p.waitForTimeout(500);
