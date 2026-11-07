@@ -59,8 +59,19 @@ export class OsError extends Error {
 /** Network call that never throws a raw error: failures become labelled OsErrors. */
 async function net(f: Fetch, url: string, init: RequestInit, stage: Stage): Promise<Response> {
   try {
-    return await f(url, init);
-  } catch {
+    // Redirects are followed here (at most 2), keeping our headers: an automatic redirect can drop
+    // the Api-Key header, and OpenSubtitles then refuses the request (403).
+    let u = url;
+    for (let hop = 0; ; hop++) {
+      const res = await f(u, { ...init, redirect: 'manual' });
+      const loc = res.headers.get('location');
+      if (![301, 302, 303, 307, 308].includes(res.status) || !loc || hop >= 2) return res;
+      const next = new URL(loc, u);
+      if (next.protocol !== 'https:') return res;
+      u = next.toString();
+    }
+  } catch (e) {
+    if (e instanceof OsError) throw e;
     throw new OsError({ kind: 'upstream', status: 0, stage });
   }
 }
@@ -83,10 +94,10 @@ export const imdbNum = (id: string) => String(Number(String(id).replace(/^tt/i, 
 
 /** Search URL with parameters lowercase and in alphabetical order. */
 export function searchPath(q: SearchQuery): string {
+  // Only non-default parameters: OpenSubtitles redirects requests that spell out defaults.
+  // AI / machine translations are filtered out of the results instead (toResults).
   const p: Record<string, string> = {
-    ai_translated: 'exclude',
     languages: q.lang,
-    machine_translated: 'exclude',
     order_by: 'download_count',
   };
   if (q.season != null && q.episode != null) {
@@ -149,12 +160,12 @@ export class OpenSubtitles {
   // the default wraps it in a plain function.
   constructor(private creds: Creds, private fetcher: Fetch = (url, init) => fetch(url, init), private now = () => Date.now()) {}
 
-  private headers(auth: boolean): Record<string, string> {
+  private headers(auth: boolean, json = true): Record<string, string> {
     return {
       'Api-Key': this.creds.apiKey,
       'User-Agent': UA,
       Accept: 'application/json',
-      'Content-Type': 'application/json',
+      ...(json ? { 'Content-Type': 'application/json' } : {}),
       ...(auth && this.token ? { Authorization: `Bearer ${this.token}` } : {}),
     };
   }
@@ -196,7 +207,7 @@ export class OpenSubtitles {
 
   /** Search needs only the API key: no login, so a login problem never blocks it. */
   private async anonymous(path: string, init: RequestInit = {}, stage: Stage = 'search-network'): Promise<Response> {
-    const res = await net(this.fetcher, `${DEFAULT_BASE}${path}`, { ...init, headers: this.headers(false) }, stage);
+    const res = await net(this.fetcher, `${DEFAULT_BASE}${path}`, { ...init, headers: this.headers(false, !!init.body) }, stage);
     if (res.status === 429) throw new OsError({ kind: 'busy' });
     return res;
   }

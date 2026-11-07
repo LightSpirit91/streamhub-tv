@@ -24,9 +24,9 @@ const hit = (lang: string, id: number, dl: number, extra: Record<string, unknown
 describe('OpenSubtitles API rules', () => {
   it('builds search URLs lowercase, alphabetical, without tt and leading zeros', () => {
     expect(imdbNum('tt0051744')).toBe('51744');
-    expect(searchPath({ imdbId: 'tt0051744', lang: 'es' })).toBe('/subtitles?ai_translated=exclude&imdb_id=51744&languages=es&machine_translated=exclude&order_by=download_count');
+    expect(searchPath({ imdbId: 'tt0051744', lang: 'es' })).toBe('/subtitles?imdb_id=51744&languages=es&order_by=download_count');
     expect(searchPath({ imdbId: 'tt0052520', lang: 'he', season: 1, episode: 3 })).toBe(
-      '/subtitles?ai_translated=exclude&episode_number=3&languages=he&machine_translated=exclude&order_by=download_count&parent_imdb_id=52520&season_number=1',
+      '/subtitles?episode_number=3&languages=he&order_by=download_count&parent_imdb_id=52520&season_number=1',
     );
   });
 
@@ -164,5 +164,26 @@ describe('subtitle backend on Cloudflare (fixes the 500)', () => {
     expect(label).toBe('exception-TypeError');
     expect(JSON.stringify(b)).not.toMatch(/SECRET|Bearer|Illegal/);
     expect(errorBody(new OsError({ kind: 'upstream', status: 502, stage: 'search-json' }))).toEqual([{ error: 'unavailable', code: 'search-json-502' }, 502, 'search-json-502']);
+  });
+});
+
+describe('redirects keep the API key', () => {
+  it('follows a redirect itself and sends Api-Key again', async () => {
+    const { f, calls } = fake((c) =>
+      c.url.includes('/subtitles?') && !c.url.includes('moved')
+        ? { status: 301, body: {} }
+        : { status: 200, body: { data: [hit('es', 3, 1)] } },
+    );
+    // the fake answers 301 with a Location header
+    const withLocation = (async (url: string, init: RequestInit) => {
+      const r = await f(url, init);
+      return r.status === 301 ? new Response('', { status: 301, headers: { location: 'https://api.opensubtitles.com/api/v1/subtitles?moved=1' } }) : r;
+    }) as typeof fetch;
+    const os = new OpenSubtitles(CREDS, withLocation);
+    expect((await os.search({ imdbId: 'tt0051744', lang: 'es' })).map((r) => r.fileId)).toEqual([3]);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain('moved=1');
+    expect(calls[1].headers['Api-Key']).toBe('KEY-SECRET');
+    expect(calls[0].headers['Content-Type']).toBeUndefined(); // GET without Content-Type
   });
 });

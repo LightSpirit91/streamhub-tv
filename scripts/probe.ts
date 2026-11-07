@@ -9,22 +9,17 @@ async function main() {
   const key = process.env.OPENSUBTITLES_API_KEY ?? '';
   console.log(`key present: ${!!key}`);
   if (!key) return;
-  const H = { 'Api-Key': key, 'User-Agent': 'StreamHub v1.0', Accept: 'application/json', 'Content-Type': 'application/json' };
+  const H = { 'Api-Key': key, 'User-Agent': 'StreamHub v1.0', Accept: 'application/json' };
   const cat = (m: string) =>
     /consume|api.?key|invalid key|not allowed/i.test(m) ? 'API key refused' : /user.?agent/i.test(m) ? 'User-Agent refused' : /quota|limit/i.test(m) ? 'limit' : m ? 'other' : '-';
   const tries: [string, string][] = [
     ['backend search (film, es)', searchPath({ imdbId: 'tt0051744', lang: 'es' })],
     ['backend search (episode, en)', searchPath({ imdbId: 'tt0052520', lang: 'en', season: 1, episode: 1 })],
-    ['plain search (film, imdb only)', '/subtitles?imdb_id=51744'],
   ];
   for (const [label, path] of tries) {
     const r = await fetch(`https://api.opensubtitles.com/api/v1${path}`, { headers: H, redirect: 'manual' });
     const j = (await r.json().catch(() => ({}))) as { total_count?: number; message?: string; errors?: string[] };
     console.log(`${label}: HTTP ${r.status} · json ${(r.headers.get('content-type') ?? '').includes('json')} · results ${j.total_count ?? '-'} · reason ${cat(String(j.message ?? j.errors?.join(' ') ?? ''))}${r.status >= 300 && r.status < 400 ? ' · redirected' : ''}`);
   }
-  // Same requests without a Content-Type header (GET with Content-Type can be refused by some APIs).
-  const { 'Content-Type': _ct, ...H2 } = H;
-  const r2 = await fetch(`https://api.opensubtitles.com/api/v1${tries[0][1]}`, { headers: H2 });
-  console.log(`backend search without Content-Type: HTTP ${r2.status}`);
 }
 main();
