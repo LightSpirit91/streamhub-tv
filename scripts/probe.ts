@@ -1,25 +1,28 @@
 /**
- * Same search the subtitle backend makes, from GitHub with the GitHub copy of
- * the API key. No login, no downloads. Prints status codes and a short
- * reason category from OpenSubtitles' reply; never the key or the reply.
+ * Check of the StreamHub subtitle backend from GitHub's servers, the way
+ * the app calls it (GitHub Pages origin). Searches only: no downloads.
+ * Prints status codes, result counts, the first result's release name and
+ * error labels. Never any credentials or tokens.
  */
-import { searchPath } from '../worker/subtitles/src/opensubtitles';
-
 async function main() {
-  const key = process.env.OPENSUBTITLES_API_KEY ?? '';
-  console.log(`key present: ${!!key}`);
-  if (!key) return;
-  const H = { 'Api-Key': key, 'User-Agent': 'StreamHub v1.0', Accept: 'application/json' };
-  const cat = (m: string) =>
-    /consume|api.?key|invalid key|not allowed/i.test(m) ? 'API key refused' : /user.?agent/i.test(m) ? 'User-Agent refused' : /quota|limit/i.test(m) ? 'limit' : m ? 'other' : '-';
-  const tries: [string, string][] = [
-    ['backend search (film, es)', searchPath({ imdbId: 'tt0051744', lang: 'es' })],
-    ['backend search (episode, en)', searchPath({ imdbId: 'tt0052520', lang: 'en', season: 1, episode: 1 })],
-  ];
-  for (const [label, path] of tries) {
-    const r = await fetch(`https://api.opensubtitles.com/api/v1${path}`, { headers: H, redirect: 'manual' });
-    const j = (await r.json().catch(() => ({}))) as { total_count?: number; message?: string; errors?: string[] };
-    console.log(`${label}: HTTP ${r.status} · json ${(r.headers.get('content-type') ?? '').includes('json')} · results ${j.total_count ?? '-'} · reason ${cat(String(j.message ?? j.errors?.join(' ') ?? ''))}${r.status >= 300 && r.status < 400 ? ' · redirected' : ''}`);
+  const base = (process.env.SUBTITLES_API_URL ?? '').replace(/\/$/, '');
+  console.log(`backend address set: ${!!base}`);
+  if (!base) return;
+  const origin = { Origin: 'https://lightspirit91.github.io' };
+  for (const [label, path] of [
+    ['film (House on Haunted Hill 1959), Spanish', '/search?imdb=tt0051744&lang=es'],
+    ['film (House on Haunted Hill 1959), English', '/search?imdb=tt0051744&lang=en'],
+    ['episode (Twilight Zone S1E1), English', '/search?imdb=tt0052520&lang=en&season=1&episode=1'],
+  ]) {
+    try {
+      const r = await fetch(`${base}${path}`, { headers: origin });
+      const j = (await r.json().catch(() => ({}))) as { results?: { release?: string; downloads?: number }[]; error?: string; code?: string; quota?: { remaining?: number } };
+      const first = j.results?.[0];
+      console.log(`${label}: HTTP ${r.status} · results ${j.results?.length ?? '-'}${first ? ` · top "${String(first.release).slice(0, 60)}" (${first.downloads} downloads)` : ''} · error ${j.error ?? '-'} · code ${j.code ?? '-'} · downloads left today ${j.quota?.remaining ?? '-'}`);
+    } catch (e) {
+      console.log(`${label}: request failed (${(e as Error).name})`);
+    }
+    await new Promise((r) => setTimeout(r, 1500));
   }
 }
 main();
