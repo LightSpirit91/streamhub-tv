@@ -6,6 +6,7 @@ name: Channel Doctor
 on:
   schedule:
     - cron: '17 9 * * *' # ~4:17 AM Toronto
+    - cron: '47 11 * * *' # backup ~6:47 AM: GitHub sometimes skips a scheduled run; does nothing if 4:17 worked
   workflow_dispatch: {}
 
 permissions:
@@ -17,7 +18,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Backup schedule: skip when tonight's catalog is already fresh (built in the last 6 hours).
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.fresh.outputs.skip }}
+    steps:
+      - id: fresh
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then exit 0; fi
+          built=$(curl -s "https://raw.githubusercontent.com/${{ github.repository }}/catalog/report.md" | grep -o 'Built [0-9T:.-]*Z' | cut -d' ' -f2)
+          age=$(( $(date +%s) - $(date -d "${built:-1970-01-01}" +%s) ))
+          echo "catalog age ${age}s"
+          if [ "$age" -lt 21600 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
   doctor:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -33,6 +50,8 @@ jobs:
           git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" prev || mkdir -p prev
           mkdir -p dist
           cp prev/*.json prev/*.md prev/*.csv dist/ 2>/dev/null || true
+          # Translated subtitle files made on earlier nights.
+          cp -r prev/subs dist/ 2>/dev/null || true
       - run: npx tsx scripts/channel-doctor.ts --check --previous prev --out dist
       - name: Channel previews
         continue-on-error: true

@@ -1,0 +1,43 @@
+# Free translated subtitles: Spanish, Russian, Hebrew from each film's
+# English subtitles, with Argos Translate (open source, offline). Runs after
+# the nightly update; a few films a night, most-watched first.
+name: Subtitles
+
+on:
+  schedule:
+    - cron: '23 13 * * *' # ~8:23 AM Toronto, after the nightly update and its backup
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-branch
+  cancel-in-progress: false
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Load current catalog
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
+      - run: pip install -q argostranslate
+      - run: python scripts/translate_subs.py dist
+        env:
+          BUDGET_MIN: '35'
+      - name: Publish
+        run: |
+          cd dist
+          rm -rf .git
+          git init -q -b catalog
+          git config user.name "subtitles"
+          git config user.email "subtitles@users.noreply.github.com"
+          git add -A
+          git commit -qm "Subtitles $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
+      - run: cat dist/subs-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

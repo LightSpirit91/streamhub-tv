@@ -58,7 +58,7 @@ export function SubtitleMenu({ choice, options, onPick, narrow }: { choice: SubC
       <MenuItem label="Off" active={choice === 'off'} onPress={() => onPick('off')} />
       {SUB_LANGS.map((l) => {
         const o = options.find((x) => x.code === l.code)!;
-        const where = o.track ? 'In the broadcast' : o.file ? 'Subtitle file' : 'Not available for this title';
+        const where = o.track ? 'In the broadcast' : o.file ? (o.file.auto ? 'Translated automatically' : 'Subtitle file') : 'Not available for this title';
         return <MenuItem key={l.code} label={l.native === l.label ? l.label : `${l.label} · ${l.native}`} note={where} dim={!o.track && !o.file} active={choice === l.code} onPress={() => onPick(l.code)} />;
       })}
       <Text style={styles.menuFoot}>

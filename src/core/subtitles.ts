@@ -17,6 +17,8 @@ export const SUB_LANGS: { code: SubLang; label: string; native: string; rtl?: bo
 export interface SubFile {
   lang: SubLang;
   url: string;
+  /** Made by machine translation from the film's English subtitles. */
+  auto?: boolean;
 }
 
 /** A subtitle / caption track inside the stream itself. */
