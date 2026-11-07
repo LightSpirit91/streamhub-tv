@@ -1,4 +1,5 @@
 import type { FreeLink, TmdbMeta } from '../meta/tmdb';
+import type { SubFile } from '../subtitles';
 
 export interface Movie extends TmdbMeta {
   id: string;
@@ -31,6 +32,9 @@ export interface Movie extends TmdbMeta {
   freeOn?: FreeLink[];
   /** Last time the free availability was checked (ms). */
   freeCheckedAt?: number;
+  /** Subtitle files that ship with the film (English, Spanish, Russian, Hebrew). */
+  subs?: SubFile[];
+  subsCheckedAt?: number;
   /** Production countries as ISO codes (free titles), e.g. ['US']. */
   origin?: string[];
   /** Release date (YYYY-MM-DD) when known; newest-first ordering uses it. */

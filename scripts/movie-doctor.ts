@@ -17,10 +17,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  imdbIdFrom, isWatchable, metadataUrl, openLicense, runtimeMinutes, searchUrl, titleKey, toMovie,
+  fileUrl, imdbIdFrom, isWatchable, metadataUrl, openLicense, runtimeMinutes, searchUrl, titleKey, toMovie,
   type ArchiveFile, type SearchDoc,
 } from '../src/core/movies/archive';
 import { creditsQuery, parseCredits } from '../src/core/movies/wikidata';
+import { subFilesOf } from '../src/core/subtitles';
 import { MIN_NEW_MOVIE_YEAR, newEnough, type Movie, type MovieCatalog } from '../src/core/movies/types';
 
 const args = process.argv.slice(2);
@@ -118,6 +119,8 @@ async function main() {
       if (previous.length && newestIds.has(m.id)) m.addedAt = now; // genuinely new uploads only
       m.imdbId = imdbIdFrom(md['external-identifier']) ?? imdbIdFrom(md.imdb);
       m.minutes ??= runtimeMinutes(md.runtime as string | undefined);
+      m.subs = subFilesOf(meta.files ?? [], (n) => fileUrl(d.identifier, n), m.language);
+      m.subsCheckedAt = now;
       library.set(m.id, m);
       added++;
     } catch {
@@ -125,6 +128,21 @@ async function main() {
     }
   });
   console.log(`new titles added: ${added}`);
+
+  // Subtitle files (.srt / .vtt) shipped with films already in the library: 1,500 a night until all are checked.
+  const needSubs = [...library.values()].filter((m) => m.source === 'archive' && !m.subsCheckedAt).slice(0, 1500);
+  let withSubs = 0;
+  await pool(needSubs, 24, async (m) => {
+    try {
+      const meta = await json<{ files?: ArchiveFile[] }>(metadataUrl(m.id));
+      m.subs = subFilesOf(meta.files ?? [], (n) => fileUrl(m.id, n), m.language);
+      m.subsCheckedAt = now;
+      if (m.subs.length) withSubs++;
+    } catch {
+      // next night
+    }
+  });
+  console.log(`subtitles: checked ${needSubs.length}, ${withSubs} have subtitle files`);
 
   // Credits from Wikidata for titles that haven't been checked yet.
   const needCredits = [...library.values()].filter((m) => m.director === undefined);
@@ -201,6 +219,7 @@ async function main() {
     `- Films: **${movies.length}** (${added} new tonight)`,
     `- With cast/director: ${movies.filter((m) => m.cast?.length || m.director?.length).length}`,
     `- With IMDb id: ${movies.filter((m) => m.imdbId).length} · with IMDb rating: ${movies.filter((m) => m.imdbRating).length}`,
+    `- Subtitles: ${['en', 'es', 'ru', 'he'].map((l) => `${l} ${movies.filter((m) => m.subs?.some((s) => s.lang === l)).length}`).join(' · ')} (checked ${movies.filter((m) => m.subsCheckedAt).length} of ${movies.filter((m) => m.source === 'archive').length})`,
     `- Genres: ${JSON.stringify(tally((m) => m.genres))}`,
     `- Languages: ${JSON.stringify(tally((m) => (m.language ? [m.language] : [])))}`,
   ].join('\n');

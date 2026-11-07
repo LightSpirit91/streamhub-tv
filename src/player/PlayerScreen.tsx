@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import {
-  Airplay, CalendarDays, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
+  Airplay, CalendarDays, Captions, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
   RectangleHorizontal, RotateCcw, RotateCw, Volume2, VolumeX,
 } from 'lucide-react-native';
 import type { Channel, Stream } from '../core/types';
@@ -20,6 +20,8 @@ import AirPlayNative from './cast/AirPlayNative';
 import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
 import { clock, useNow } from '../hooks/useNow';
 import type { Fit } from './StreamVideo.types';
+import { SUB_LANGS, type StreamTrack } from '../core/subtitles';
+import { SubtitleMenu, SubtitleOverlay, subOptions, useSubtitleFile } from './Subtitles';
 
 const FITS: { fit: Fit; label: string }[] = [
   { fit: 'contain', label: 'Fit' },
@@ -92,12 +94,26 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const [chrome, setChrome] = useState(true);
   const [time, setTime] = useState({ cur: 0, dur: 0 });
   const [seek, setSeek] = useState<{ to: number; n: number } | undefined>(undefined);
+  // Subtitles: the profile's language, from the broadcast's own tracks or a subtitle file.
+  const subLang = useStreamHub((s) => s.subLang);
+  const setSubLang = useStreamHub((s) => s.setSubLang);
+  const [inTracks, setInTracks] = useState<StreamTrack[]>([]);
+  const [subMenu, setSubMenu] = useState(false);
+  const subMenuRef = useRef(false);
+  subMenuRef.current = subMenu;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastSave = useRef(0);
 
   const stream = streams[streamIdx];
   const nowSec = useNow();
+  useEffect(() => setInTracks([]), [stream?.url, attempt]);
+  const subFiles = item.kind === 'movie' ? item.movie.subs : item.kind === 'episode' ? item.show.episodes[item.index]?.subs : undefined;
+  const subOpts = useMemo(() => subOptions(inTracks, subFiles), [inTracks, subFiles]);
+  const activeSub = subLang === 'off' ? undefined : subOpts.find((o) => o.code === subLang);
+  const textTrack = activeSub?.track?.id ?? null;
+  const sideCues = useSubtitleFile(!activeSub?.track ? activeSub?.file?.url : undefined);
+  const subOn = !!(activeSub?.track || activeSub?.file);
   const guide = useProgramme(id, nowSec);
 
   // Chromecast: while a TV is connected, nothing plays here and this screen
@@ -250,6 +266,18 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (overlayOpen()) return; // the schedule sheet owns the keys
       const k = e.key;
+      if (subMenuRef.current && (k === 'Escape' || k === 'Backspace')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSubMenu(false);
+        return;
+      }
+      if (k === 'c' || k === 'C') {
+        setSubMenu((m) => !m);
+        showChrome();
+        e.preventDefault();
+        return;
+      }
       if (k === 'Escape' || k === 'Backspace') onClose();
       else if (live && (k === 'ArrowUp' || k === 'PageUp')) go(-1);
       else if (live && (k === 'ArrowDown' || k === 'PageDown')) go(1);
@@ -284,7 +312,8 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onClose();
+      if (subMenuRef.current) setSubMenu(false);
+      else onClose();
       return true;
     });
     return () => sub.remove();
@@ -319,6 +348,8 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           onPlaying={handlePlaying}
           onError={handleError}
           onAutoMuted={() => setAutoMuted(true)}
+          textTrack={textTrack}
+          onTextTracks={setInTracks}
         />
       )}
 
@@ -339,6 +370,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
         <StatusOverlay state={state} title={title} sources={streams.length} live={live} />
       ) : null}
 
+      {!casting && sideCues ? <SubtitleOverlay cues={sideCues} time={time.cur} rtl={SUB_LANGS.find((l) => l.code === subLang)?.rtl} raised={chrome} /> : null}
       {castConnected && !casting ? (
         <View style={styles.ytHint} pointerEvents="none">
           <Text style={styles.ytHintText}>
@@ -399,6 +431,11 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
             {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
               <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
             ) : null}
+            {!casting ? (
+              <IconBtn onPress={() => { setSubMenu((m) => !m); showChrome(); }} label="Subtitles">
+                <Captions size={22} color={subOn ? colors.gold : ic} />
+              </IconBtn>
+            ) : null}
             {live && channel ? (
               <IconBtn onPress={() => useUi.getState().openSchedule(channel)} label="Full schedule">
                 <CalendarDays size={22} color={ic} />
@@ -448,6 +485,19 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           </View>
         </>
       )}
+      {subMenu ? (
+        <>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSubMenu(false)} accessibilityLabel="Close subtitles menu" />
+          <SubtitleMenu
+            choice={subLang}
+            options={subOpts}
+            onPick={(c) => {
+              setSubLang(c);
+              setSubMenu(false);
+            }}
+          />
+        </>
+      ) : null}
     </View>
   );
 }

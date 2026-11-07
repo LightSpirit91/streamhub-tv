@@ -1,3 +1,4 @@
+import { subFilesOf } from '../subtitles';
 import type { Episode, Show } from './types';
 import { cleanText, cleanTitle, fileUrl, genresFrom, isWatchable, languageOf, posterUrl, type ArchiveFile, type SearchDoc } from '../movies/archive';
 
@@ -89,11 +90,15 @@ export function itemToShowParts(
     const label = cleanText(f.title || f.name.replace(/\.mp4$/i, '').replace(/[_.]+/g, ' '), 90);
     const minutes = f.length ? Math.round(Number(f.length) / 60) || undefined : undefined;
     const se = seasonEpisode(multi ? f.name : doc.title ?? "");
+    // Subtitle files named like the episode (or any, for a one-episode item).
+    const base = f.name.replace(/\.mp4$/i, '');
+    const subs = subFilesOf(files.filter((s) => !multi || s.name.startsWith(base)), (n) => fileUrl(doc.identifier, n), languageOf(doc.language));
     return {
       id: `${doc.identifier}/${f.name}`,
       title: multi ? label : episode,
       url: fileUrl(doc.identifier, f.name),
       minutes,
+      ...(subs.length ? { subs } : {}),
       ...se,
       ...(multi && !se.episode ? { episode: i + 1 } : {}),
     };

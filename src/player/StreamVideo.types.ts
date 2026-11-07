@@ -1,4 +1,5 @@
 import type { Stream } from '../core/types';
+import type { StreamTrack } from '../core/subtitles';
 
 export type Fit = 'contain' | 'cover' | 'fill';
 
@@ -24,6 +25,10 @@ export interface StreamVideoProps {
   onEnded?(): void;
   onPlaying(): void;
   onError(reason: string): void;
+  /** Subtitle / caption track inside the stream to show (id from onTextTracks); null = none. */
+  textTrack?: string | null;
+  /** Subtitle / caption tracks found in the stream. */
+  onTextTracks?(tracks: StreamTrack[]): void;
   /** Autoplay with sound was blocked (browsers); playing muted instead. */
   onAutoMuted?(): void;
 }

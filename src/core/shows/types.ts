@@ -1,4 +1,5 @@
 import type { FreeLink, TmdbMeta } from '../meta/tmdb';
+import type { SubFile } from '../subtitles';
 
 export interface Episode {
   id: string;
@@ -7,6 +8,8 @@ export interface Episode {
   season?: number;
   episode?: number;
   minutes?: number;
+  /** Subtitle files that ship with the episode. */
+  subs?: SubFile[];
 }
 
 export interface Show extends TmdbMeta {

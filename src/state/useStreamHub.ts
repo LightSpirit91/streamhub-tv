@@ -13,6 +13,7 @@ import type { Guide, Programme } from '../core/epg/xmltv';
 import { isWatchable, stripEmoji } from '../core/movies/archive';
 import { genresFromTmdb } from '../core/movies/youtube';
 import { northAmerican } from '../core/movies/types';
+import type { SubChoice } from '../core/subtitles';
 import { currentFreeLinks, type FreeLink } from '../core/meta/tmdb';
 
 /** Watchable only with a library card: ranked below titles anyone can play right away. */
@@ -35,6 +36,8 @@ interface ProfileData {
   movieList: string[];
   movieProgress: Record<string, number>;
   reminders: Reminder[];
+  /** Subtitle language this profile wants (applied wherever it exists). */
+  subLang: SubChoice;
 }
 
 /** A programme in the TV guide this profile asked to be reminded about. */
@@ -53,6 +56,7 @@ function loadProfile(p: ProfileId): ProfileData {
     movieList: readJSON<string[]>(pk(p, 'movieList'), []),
     movieProgress: readJSON<Record<string, number>>(pk(p, 'movieProgress'), {}),
     reminders: readJSON<Reminder[]>(pk(p, 'reminders'), []).filter((r) => r.end * 1000 > Date.now()),
+    subLang: readJSON<SubChoice>(pk(p, 'subLang'), 'off'),
   };
 }
 
@@ -81,6 +85,7 @@ interface StreamHubState extends ProfileData {
   toggleMovie(id: string): void;
   saveMovieProgress(id: string, seconds: number): void;
   toggleReminder(r: Reminder): void;
+  setSubLang(l: SubChoice): void;
   /** Wipes a deleted profile's saved data. */
   forgetProfile(id: string): void;
 }
@@ -161,7 +166,7 @@ async function loadShows(force: boolean): Promise<Show[]> {
 }
 
 let healthTimer: ReturnType<typeof setTimeout> | undefined;
-const empty: ProfileData = { favorites: [], recents: [], movieList: [], movieProgress: {}, reminders: [] };
+const empty: ProfileData = { favorites: [], recents: [], movieList: [], movieProgress: {}, reminders: [], subLang: 'off' };
 
 export const useStreamHub = create<StreamHubState>((set, get) => ({
   profile: null,
@@ -272,8 +277,14 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
     writeJSON(pk(profile, 'reminders'), next);
   },
 
+  setSubLang(l) {
+    const { profile } = get();
+    set({ subLang: l });
+    if (profile) writeJSON(pk(profile, 'subLang'), l);
+  },
+
   forgetProfile(id) {
-    for (const k of ['favorites', 'recents', 'lastChannel', 'movieList', 'movieProgress', 'reminders']) writeJSON(pk(id, k), null);
+    for (const k of ['favorites', 'recents', 'lastChannel', 'movieList', 'movieProgress', 'reminders', 'subLang']) writeJSON(pk(id, k), null);
     if (get().profile === id) set({ profile: null, ...empty });
   },
 

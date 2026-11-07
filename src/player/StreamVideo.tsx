@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { useEventListener } from 'expo';
-import { useVideoPlayer, VideoView, type ContentType } from 'expo-video';
+import { useVideoPlayer, VideoView, type ContentType, type SubtitleTrack } from 'expo-video';
+import { normLang } from '../core/subtitles';
 import type { StreamVideoProps } from './StreamVideo.types';
 
 /**
@@ -13,7 +14,7 @@ export default function StreamVideo(p: StreamVideoProps) {
   const player = useVideoPlayer(null, (pl) => {
     pl.staysActiveInBackground = true;
     pl.showNowPlayingNotification = true;
-    pl.timeUpdateEventInterval = 1;
+    pl.timeUpdateEventInterval = 0.5; // also drives subtitle files
   });
 
   const cb = useRef(p);
@@ -57,6 +58,23 @@ export default function StreamVideo(p: StreamVideoProps) {
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     cb.current.onTime?.(currentTime, player.duration || 0);
   });
+  // Subtitles / captions carried in the stream.
+  const subTracks = useRef<SubtitleTrack[]>([]);
+  useEventListener(player, 'availableSubtitleTracksChange', ({ availableSubtitleTracks }) => {
+    subTracks.current = availableSubtitleTracks;
+    cb.current.onTextTracks?.(
+      availableSubtitleTracks.map((t, i) => ({ id: String(i), lang: normLang(t.language) ?? normLang(t.label), label: t.label || t.language || `Track ${i + 1}` })),
+    );
+  });
+  useEffect(() => {
+    const t = p.textTrack != null ? subTracks.current[Number(p.textTrack)] : undefined;
+    try {
+      player.subtitleTrack = t ?? null;
+    } catch {
+      // track list changed underneath; the next update re-applies
+    }
+  }, [player, p.textTrack]);
+
   useEventListener(player, 'playToEnd', () => cb.current.onEnded?.());
 
   useEventListener(player, 'statusChange', ({ status, error }) => {

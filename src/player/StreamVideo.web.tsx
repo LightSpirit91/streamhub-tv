@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import Hls from 'hls.js';
 import type { StreamVideoProps } from './StreamVideo.types';
+import { normLang, type StreamTrack } from '../core/subtitles';
+
+const textKinds = new Set(['subtitles', 'captions']);
 
 /**
  * Browser player. Safari (Mac, iPhone) plays HLS natively. Chrome, Edge and
@@ -29,6 +32,21 @@ export default function StreamVideo(p: StreamVideoProps) {
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('ended', onEnded);
     v.addEventListener('loadedmetadata', onMeta, { once: true });
+    // Subtitles and captions carried in the stream (HLS subtitle tracks, CEA-608 captions).
+    const tracks = v.textTracks;
+    const reportTracks = () => {
+      if (dead) return;
+      const list: StreamTrack[] = [];
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        if (!textKinds.has(t.kind)) continue;
+        list.push({ id: String(i), lang: normLang(t.language) ?? normLang(t.label), label: t.label || t.language || `Track ${i + 1}` });
+      }
+      cb.current.onTextTracks?.(list);
+      applyTrack(v, cb.current.textTrack);
+    };
+    tracks.addEventListener('addtrack', reportTracks);
+    tracks.addEventListener('removetrack', reportTracks);
 
     const native = v.canPlayType('application/vnd.apple.mpegurl') !== '';
     if (p.stream.format !== 'hls' || native) {
@@ -58,11 +76,17 @@ export default function StreamVideo(p: StreamVideoProps) {
       v.removeEventListener('error', onError);
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('ended', onEnded);
+      tracks.removeEventListener('addtrack', reportTracks);
+      tracks.removeEventListener('removetrack', reportTracks);
       hls?.destroy();
       v.removeAttribute('src');
       v.load();
     };
   }, [p.stream.url, p.attempt, p.stream.format]);
+
+  useEffect(() => {
+    if (ref.current) applyTrack(ref.current, p.textTrack);
+  }, [p.textTrack]);
 
   useEffect(() => {
     if (ref.current && p.seek) ref.current.currentTime = Math.max(0, p.seek.to);
@@ -102,4 +126,14 @@ export default function StreamVideo(p: StreamVideoProps) {
       }}
     />
   );
+}
+
+/** Shows one in-stream text track (by index), hides the rest. */
+function applyTrack(v: HTMLVideoElement, id?: string | null) {
+  for (let i = 0; i < v.textTracks.length; i++) {
+    const t = v.textTracks[i];
+    if (!textKinds.has(t.kind)) continue;
+    const want = String(i) === id ? 'showing' : 'disabled';
+    if (t.mode !== want) t.mode = want;
+  }
 }

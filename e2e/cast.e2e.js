@@ -12,6 +12,14 @@ const BASE = process.env.BASE_URL || 'http://localhost:8776/streamhub-tv/';
   const b = await chromium.launch(process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost' } } : {});
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/gstatic\.com\/cv\/js\/sender/, (r) => r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(__dirname + '/fake-cast-sdk.js', 'utf8') }));
+  // Casting is about titles that play inside StreamHub; free-elsewhere titles (they open on Tubi etc.) are left out here.
+  await ctx.route(/catalog\/(movies|shows)\.json/, async (route) => {
+    const res = await route.fetch();
+    const j = await res.json();
+    if (j.movies) j.movies = j.movies.filter((m) => m.source !== 'free');
+    if (j.shows) j.shows = j.shows.filter((x) => x.source !== 'free');
+    await route.fulfill({ response: res, json: j });
+  });
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   const log = async () => p.evaluate(() => window.__castLog.map((x) => x.join(' | ')));
