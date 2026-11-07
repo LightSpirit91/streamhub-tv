@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { CalendarDays, Expand, Heart, Volume2, VolumeX } from 'lucide-react-native';
+import { CalendarDays, Expand, Heart, Pause, Play, Volume2, VolumeX } from 'lucide-react-native';
 import { overlayOpen, useUi } from '../state/ui';
 import type { Channel, HubId } from '../core/types';
 import { HUBS, HUB_BY_ID } from '../core/catalog/hubs';
@@ -21,6 +21,8 @@ const TUNE_DELAY = 550;
 interface Props {
   initialHub?: HubId | null;
   onFullscreen(c: Channel, row: Channel[]): void;
+  /** The fullscreen player is open: the preview stops (one sound at a time). */
+  suspended?: boolean;
 }
 
 /**
@@ -28,7 +30,7 @@ interface Props {
  * the selected channel playing live on the other. Up/Down surfs, Enter or
  * OK goes fullscreen.
  */
-export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
+export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
   const L = useLayout();
   const channels = useStreamHub((s) => s.channels);
   const favorites = useStreamHub((s) => s.favorites);
@@ -113,47 +115,52 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
     ...HUBS.filter((h) => h.id !== 'spotlight').map((h) => ({ id: h.id, label: h.title, color: h.accent })),
   ];
 
-  const preview = (
-    <View style={[styles.preview, wide ? { flex: 1 } : { aspectRatio: 16 / 9 }]}>
-      {tuned ? <Preview key={tuned.id} channel={tuned} /> : null}
-      {current && (
-        <View style={styles.previewInfo}>
-          <View style={styles.infoRow}>
-            <LiveBadge />
-            <Text style={styles.chNumBig}>{numbers.get(current.id)}</Text>
-          </View>
-          <Text style={[styles.previewTitle, L.compact && { fontSize: 22 }]} numberOfLines={1}>{current.name}</Text>
-          <View style={styles.infoRow}>
-            <CountryTag country={current.country} />
-            <QualityBadge label={qualityLabel(current.bestHeight)} />
-            {current.hubs
+  // Video in its own 16:9 box with small controls; channel info below it, never on top.
+  const video = (
+    <View style={[styles.videoBox, wide && L.height < 760 ? { maxHeight: L.height * 0.42 } : null]}>
+      {tuned && !suspended ? (
+        <Preview key={tuned.id} channel={tuned} onFullscreen={() => current && onFullscreen(current, list)} />
+      ) : null}
+    </View>
+  );
+  const info = current ? (
+    <View style={[styles.previewInfo, !wide && styles.previewInfoCompact]}>
+      <View style={styles.infoRow}>
+        <LiveBadge />
+        <Text style={styles.chNumBig}>{numbers.get(current.id)}</Text>
+        <CountryTag country={current.country} />
+        <QualityBadge label={qualityLabel(current.bestHeight)} />
+        {wide
+          ? current.hubs
               .filter((h) => h !== 'spotlight')
               .slice(0, 2)
               .map((h) => (
                 <Text key={h} style={[styles.hubTag, { color: HUB_BY_ID[h].accent }]}>{HUB_BY_ID[h].title}</Text>
-              ))}
-          </View>
-          {current.tagline ? <Text style={styles.tagline}>{current.tagline}</Text> : null}
-          {wide ? (
-            <View style={styles.schedule}>
-              <Schedule channelId={current.id} now={now} max={5} />
-            </View>
-          ) : null}
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-            <Button
-              variant="primary"
-              label="Watch fullscreen"
-              icon={<Expand size={16} color="#17110A" />}
-              onPress={() => onFullscreen(current, list)}
-            />
-            <Button
-              label="Full schedule"
-              icon={<CalendarDays size={16} color={colors.text} />}
-              onPress={() => useUi.getState().openSchedule(current)}
-            />
-          </View>
+              ))
+          : null}
+      </View>
+      <Text style={[styles.previewTitle, !wide && { fontSize: 20 }]} numberOfLines={1}>{current.name}</Text>
+      {wide && current.tagline ? <Text style={styles.tagline} numberOfLines={2}>{current.tagline}</Text> : null}
+      {wide ? (
+        <View style={styles.schedule}>
+          <Schedule channelId={current.id} now={now} max={4} />
         </View>
-      )}
+      ) : null}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+        <Button variant="primary" accessibilityLabel="Watch fullscreen" label={wide ? 'Watch fullscreen' : 'Fullscreen'} icon={<Expand size={16} color="#17110A" />} onPress={() => onFullscreen(current, list)} />
+        <Button accessibilityLabel="Full schedule" label={wide ? 'Full schedule' : 'Schedule'} icon={<CalendarDays size={16} color={colors.text} />} onPress={() => useUi.getState().openSchedule(current)} />
+      </View>
+    </View>
+  ) : null;
+  const preview = wide ? (
+    <View style={[styles.preview, { flex: 1 }]}>
+      {video}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>{info}</ScrollView>
+    </View>
+  ) : (
+    <View style={styles.preview}>
+      {video}
+      {info}
     </View>
   );
 
@@ -203,7 +210,7 @@ export function LiveTVScreen({ initialHub, onFullscreen }: Props) {
   );
 }
 
-const Preview = memo(function Preview({ channel }: { channel: Channel }) {
+const Preview = memo(function Preview({ channel, onFullscreen }: { channel: Channel; onFullscreen(): void }) {
   const castDevice = useCast().device;
   if (castDevice) {
     // While casting, nothing plays here: picking a channel sends it to the TV.
@@ -214,12 +221,13 @@ const Preview = memo(function Preview({ channel }: { channel: Channel }) {
       </View>
     );
   }
-  return <LocalPreview channel={channel} />;
+  return <LocalPreview channel={channel} onFullscreen={onFullscreen} />;
 });
 
-const LocalPreview = memo(function LocalPreview({ channel }: { channel: Channel }) {
+const LocalPreview = memo(function LocalPreview({ channel, onFullscreen }: { channel: Channel; onFullscreen(): void }) {
   const [idx, setIdx] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [down, setDown] = useState(false);
   const stream = channel.streams[idx];
   const report = useStreamHub((s) => s.reportStream);
@@ -231,7 +239,7 @@ const LocalPreview = memo(function LocalPreview({ channel }: { channel: Channel 
           attempt={0}
           muted={muted}
           volume={1}
-          paused={false}
+          paused={paused}
           fit="contain"
           pipRequest={0}
           onPlaying={() => report(stream.url, true)}
@@ -248,9 +256,18 @@ const LocalPreview = memo(function LocalPreview({ channel }: { channel: Channel 
           <Text style={styles.offlineText}>Surf to another channel, or try it fullscreen to keep retrying.</Text>
         </View>
       )}
-      <Pressable style={styles.mute} onPress={() => setMuted((m) => !m)} accessibilityLabel={muted ? 'Unmute' : 'Mute'}>
-        {muted ? <VolumeX size={18} color="#fff" /> : <Volume2 size={18} color="#fff" />}
-      </Pressable>
+      <View style={styles.miniBar}>
+        <MiniBtn label={paused ? 'Play preview' : 'Pause preview'} onPress={() => setPaused((x) => !x)}>
+          {paused ? <Play size={16} color="#fff" fill="#fff" /> : <Pause size={16} color="#fff" fill="#fff" />}
+        </MiniBtn>
+        <MiniBtn label={muted ? 'Unmute' : 'Mute'} onPress={() => setMuted((m) => !m)}>
+          {muted ? <VolumeX size={16} color="#fff" /> : <Volume2 size={16} color="#fff" />}
+        </MiniBtn>
+        <View style={{ flex: 1 }} />
+        <MiniBtn label="Fullscreen" onPress={onFullscreen}>
+          <Expand size={15} color="#fff" />
+        </MiniBtn>
+      </View>
     </View>
   );
 });
@@ -311,6 +328,15 @@ const GuideRow = memo(function GuideRow({
   );
 });
 
+function MiniBtn({ label, onPress, children }: { label: string; onPress(): void; children: React.ReactNode }) {
+  const f = useFocusRing();
+  return (
+    <Pressable onPress={onPress} {...f.handlers} accessibilityRole="button" accessibilityLabel={label} style={[styles.miniBtn, f.on && { borderColor: colors.focus }]}>
+      {children}
+    </Pressable>
+  );
+}
+
 function FilterChip({ label, color, active, onPress }: { label: string; color: string; active: boolean; onPress(): void }) {
   const f = useFocusRing();
   return (
@@ -347,12 +373,16 @@ const styles = StyleSheet.create({
   noGuide: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: colors.line },
   tagline: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 13 },
   schedule: { marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.line, maxWidth: 560 },
-  preview: {
-    borderRadius: 18, overflow: 'hidden', backgroundColor: '#000', borderWidth: 1, borderColor: colors.line,
-    justifyContent: 'flex-end', minHeight: 220,
+  preview: { borderRadius: 18, overflow: 'hidden', backgroundColor: colors.bgRaised, borderWidth: 1, borderColor: colors.line },
+  videoBox: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', overflow: 'hidden' },
+  previewInfo: { padding: 20, gap: 8 },
+  previewInfoCompact: { paddingHorizontal: 14, paddingVertical: 10, gap: 6 },
+  miniBar: {
+    position: 'absolute', left: 10, right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 8,
   },
-  previewInfo: {
-    padding: 24, gap: 8, backgroundColor: 'rgba(0,0,0,0.55)',
+  miniBtn: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'transparent',
   },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   chNumBig: { color: colors.gold, fontFamily: fonts.display, fontSize: 16 },

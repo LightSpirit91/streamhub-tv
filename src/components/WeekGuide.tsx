@@ -305,7 +305,7 @@ function DayList({ channelId, days, now, sel, onSelect }: {
   const items = idx === 0 && !earlier ? day.items.filter((p) => p[1] > now) : day.items;
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 10 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, minHeight: 46 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 10, alignItems: "center" }}>
         {days.map((d, i) => (
           <DayChip key={d.start} label={d.label} active={i === idx} onPress={() => setIdx(i)} />
         ))}

@@ -115,7 +115,7 @@ export default function App() {
   const screen = (() => {
     switch (tab) {
       case 'live':
-        return <LiveTVScreen initialHub={liveHub} onFullscreen={playChannel} />;
+        return <LiveTVScreen initialHub={liveHub} onFullscreen={playChannel} suspended={!!playing} />;
       case 'movies':
         return <MoviesScreen onOpen={setDetail} onPlay={playMovie} onUpcoming={setUpcomingDetail} />;
       case 'shows':

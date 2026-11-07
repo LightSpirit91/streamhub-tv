@@ -31,6 +31,19 @@ async function run(b, name, viewport) {
     await p.click('[aria-label="Back"]');
   });
   await step('Live TV guide', async () => { await tab('Live TV'); await p.waitForSelector('text=channels', { timeout: 10000 }); });
+  await step('Live TV preview: small controls, one sound in fullscreen', async () => {
+    await p.locator('[aria-label="Pause preview"]').first().waitFor({ timeout: 8000 });
+    await p.locator('[aria-label="Pause preview"]').first().click();
+    await p.locator('[aria-label="Play preview"]').first().waitFor({ timeout: 3000 });
+    await p.locator('[aria-label="Play preview"]').first().click();
+    await p.getByRole('button', { name: 'Watch fullscreen' }).first().click(); await p.waitForTimeout(1200);
+    const videos = await p.locator('video').count();
+    if (videos !== 1) throw new Error(`${videos} videos playing at once`);
+    await p.click('[aria-label="Back"]'); await p.waitForTimeout(600);
+    await p.locator('[aria-label="Pause preview"], [aria-label="Play preview"]').first().waitFor({ timeout: 5000 }).catch(async () => {
+      if (!(await p.getByText('Channel offline').count())) throw new Error('preview did not come back');
+    });
+  });
   await step('Live TV filter chip', async () => { await p.getByText('Israel', { exact: true }).first().click(); await p.waitForTimeout(600); });
   await step('Movies page + details + close', async () => {
     await tab('Movies'); await p.waitForTimeout(1500);
