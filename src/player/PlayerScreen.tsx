@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import {
-  Airplay, CalendarDays, Captions, Cast, ChevronDown, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
+  Airplay, CalendarDays, Captions, Cast, ChevronDown, SkipForward, ChevronLeft, ChevronUp, Heart, Maximize, Minus, Pause, Play, PictureInPicture2, Plus,
   RectangleHorizontal, RotateCcw, RotateCw, Volume2, VolumeX,
 } from 'lucide-react-native';
 import type { Channel, Stream } from '../core/types';
@@ -14,6 +14,7 @@ import { useRemote } from '../tv/useRemote';
 import { overlayOpen, useUi } from '../state/ui';
 import { CountryTag, LiveBadge, QualityBadge } from '../ui/primitives';
 import { colors, fonts, qualityLabel, type } from '../ui/theme';
+import { useLayout } from '../ui/layout';
 import StreamVideo from './MediaView';
 import { airPlaySupported, castMedia, connectCast, remote, stopCasting, useCast, useCastStore } from './cast/useCast';
 import AirPlayNative from './cast/AirPlayNative';
@@ -107,6 +108,11 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
 
   const stream = streams[streamIdx];
   const nowSec = useNow();
+  // Phones and narrow windows: two-row top bar and two-row controls so nothing overlaps.
+  const L = useLayout();
+  const narrow = L.width < 820;
+  // Landscape phones: little height, so tighter bars and a smaller status message.
+  const short = L.height < 500;
   useEffect(() => setInTracks([]), [stream?.url, attempt]);
   const subFiles = item.kind === 'movie' ? item.movie.subs : item.kind === 'episode' ? item.show.episodes[item.index]?.subs : undefined;
   const subOpts = useMemo(() => subOptions(inTracks, subFiles), [inTracks, subFiles]);
@@ -324,6 +330,107 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const title = channel?.name ?? movie?.title ?? '';
   const ic = colors.text;
 
+  const info = (
+    <View style={styles.info}>
+      <Text style={[styles.title, (narrow || short) && styles.titleNarrow]} numberOfLines={narrow ? 2 : 1}>{title}</Text>
+      <View style={styles.metaRow}>
+        {live ? <LiveBadge /> : null}
+        {channel ? <CountryTag country={channel.country} /> : null}
+        {channel ? <QualityBadge label={qualityLabel(stream?.height ?? channel.bestHeight)} /> : null}
+        {movie ? <Text style={styles.meta}>{[movie.year, movie.genres[0]].filter(Boolean).join('  ·  ')}</Text> : null}
+        {channel && streams.length > 1 ? <Text style={styles.meta}>Source {streamIdx + 1} of {streams.length}</Text> : null}
+        {movie?.imdbRating ? <Text style={styles.imdb}>IMDb {movie.imdbRating.toFixed(1)}</Text> : null}
+        {movie?.quality ? <Text style={styles.meta}>{movie.quality}</Text> : null}
+      </View>
+      {live && guide.now ? (
+        <View style={styles.onNow}>
+          <Text style={styles.onNowText} numberOfLines={narrow ? 2 : 1}>
+            <Text style={{ color: colors.gold }}>Now </Text>
+            {guide.now[2]}
+            <Text style={styles.meta}>{`   ${clock(guide.now[0])} - ${clock(guide.now[1])}`}</Text>
+            {!narrow && guide.next[0] ? <Text style={styles.meta}>{`   ·   Next at ${clock(guide.next[0][0])}: ${guide.next[0][2]}`}</Text> : null}
+          </Text>
+          <View style={{ width: narrow ? '100%' : 260 }}>
+            <ProgressLine value={progressOf(guide.now, nowSec)} />
+          </View>
+        </View>
+      ) : live && channel?.tagline ? (
+        <Text style={styles.meta} numberOfLines={2}>{channel.tagline}</Text>
+      ) : null}
+      {movie && (movie.director?.length || movie.cast?.length) ? (
+        <Text style={styles.meta} numberOfLines={narrow ? 2 : 1}>
+          {[movie.director?.length ? `Directed by ${movie.director.join(', ')}` : '', movie.cast?.length ? `With ${movie.cast.slice(0, 4).join(', ')}` : '']
+            .filter(Boolean)
+            .join('   ·   ')}
+        </Text>
+      ) : null}
+    </View>
+  );
+  const actions = (
+    <>
+      {stream?.format !== 'youtube' && (cast.available || casting) ? (
+        <IconBtn onPress={() => (casting ? stopCasting() : connectCast())} label={casting ? 'Stop casting' : 'Cast to TV'}>
+          <Cast size={22} color={casting ? colors.gold : ic} />
+        </IconBtn>
+      ) : null}
+      {Platform.OS === 'web' && airPlaySupported() ? (
+        <IconBtn onPress={() => setAirplay((n) => n + 1)} label="AirPlay to TV">
+          <Airplay size={22} color={ic} />
+        </IconBtn>
+      ) : null}
+      {Platform.OS === 'ios' ? <AirPlayNative /> : null}
+      {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
+        narrow ? (
+          <IconBtn onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} label="Next episode"><SkipForward size={20} color={ic} /></IconBtn>
+        ) : (
+          <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
+        )
+      ) : null}
+      {!casting ? (
+        <IconBtn onPress={() => { setSubMenu((m) => !m); showChrome(); }} label="Subtitles">
+          <Captions size={22} color={subOn ? colors.gold : ic} />
+        </IconBtn>
+      ) : null}
+      {live && channel ? (
+        <IconBtn onPress={() => useUi.getState().openSchedule(channel)} label="Full schedule">
+          <CalendarDays size={22} color={ic} />
+        </IconBtn>
+      ) : null}
+      <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(item.kind === 'episode' ? item.show.id : id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
+        <Heart size={22} color={saved ? colors.gold : ic} fill={saved ? colors.gold : 'transparent'} />
+      </IconBtn>
+    </>
+  );
+  const transport = live ? (
+    <>
+      <IconBtn onPress={() => go(-1)} label="Previous channel"><ChevronUp size={22} color={ic} /></IconBtn>
+      <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
+        {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
+      </IconBtn>
+      <IconBtn onPress={() => go(1)} label="Next channel"><ChevronDown size={22} color={ic} /></IconBtn>
+    </>
+  ) : (
+    <>
+      <IconBtn onPress={() => seekBy(-10)} label="Back 10 seconds"><RotateCcw size={20} color={ic} /></IconBtn>
+      <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
+        {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
+      </IconBtn>
+      <IconBtn onPress={() => seekBy(10)} label="Forward 10 seconds"><RotateCw size={20} color={ic} /></IconBtn>
+    </>
+  );
+  const muteBtn = (
+    <IconBtn onPress={doMute} label={isMuted ? 'Unmute' : 'Mute'}>
+      {isMuted ? <VolumeX size={20} color={ic} /> : <Volume2 size={20} color={ic} />}
+    </IconBtn>
+  );
+  const screenBtns = (
+    <>
+      <TextBtn onPress={() => setFitIdx((i) => (i + 1) % FITS.length)} label={fit.label} icon={<RectangleHorizontal size={18} color={ic} />} />
+      <IconBtn onPress={() => setPip((n) => n + 1)} label="Picture in picture"><PictureInPicture2 size={20} color={ic} /></IconBtn>
+      {isWeb && <IconBtn onPress={toggleFullscreen} label="Fullscreen"><Maximize size={20} color={ic} /></IconBtn>}
+    </>
+  );
+
   return (
     <View style={styles.root}>
       {stream && !casting && (
@@ -367,10 +474,10 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
           </Pressable>
         </View>
       ) : state.kind !== 'playing' ? (
-        <StatusOverlay state={state} title={title} sources={streams.length} live={live} />
+        <StatusOverlay state={state} title={title} sources={streams.length} live={live} small={short} />
       ) : null}
 
-      {!casting && sideCues ? <SubtitleOverlay cues={sideCues} time={time.cur} rtl={SUB_LANGS.find((l) => l.code === subLang)?.rtl} raised={chrome} /> : null}
+      {!casting && sideCues ? <SubtitleOverlay cues={sideCues} time={time.cur} rtl={SUB_LANGS.find((l) => l.code === subLang)?.rtl} raised={chrome} narrow={narrow} /> : null}
       {castConnected && !casting ? (
         <View style={styles.ytHint} pointerEvents="none">
           <Text style={styles.ytHintText}>
@@ -380,108 +487,56 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
       ) : null}
       {(chrome || casting || state.kind !== 'playing') && (
         <>
-          <View style={styles.top}>
-            <IconBtn onPress={onClose} label="Back"><ChevronLeft size={24} color={ic} /></IconBtn>
-            {channel?.logo ? <Image source={{ uri: channel.logo }} style={styles.topLogo} contentFit="contain" /> : null}
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={styles.title} numberOfLines={1}>{title}</Text>
-              <View style={styles.metaRow}>
-                {live ? <LiveBadge /> : null}
-                {channel ? <CountryTag country={channel.country} /> : null}
-                {channel ? <QualityBadge label={qualityLabel(stream?.height ?? channel.bestHeight)} /> : null}
-                {movie ? <Text style={styles.meta}>{[movie.year, movie.genres[0]].filter(Boolean).join('  ·  ')}</Text> : null}
-                {channel && streams.length > 1 ? <Text style={styles.meta}>Source {streamIdx + 1} of {streams.length}</Text> : null}
-                {movie?.imdbRating ? <Text style={styles.imdb}>IMDb {movie.imdbRating.toFixed(1)}</Text> : null}
-                {movie?.quality ? <Text style={styles.meta}>{movie.quality}</Text> : null}
-              </View>
-              {live && guide.now ? (
-                <View style={styles.onNow}>
-                  <Text style={styles.onNowText} numberOfLines={1}>
-                    <Text style={{ color: colors.gold }}>Now </Text>
-                    {guide.now[2]}
-                    <Text style={styles.meta}>{`   ${clock(guide.now[0])} - ${clock(guide.now[1])}`}</Text>
-                    {guide.next[0] ? <Text style={styles.meta}>{`   ·   Next at ${clock(guide.next[0][0])}: ${guide.next[0][2]}`}</Text> : null}
-                  </Text>
-                  <View style={{ width: 260 }}>
-                    <ProgressLine value={progressOf(guide.now, nowSec)} />
-                  </View>
+          <View style={[styles.top, narrow && styles.topNarrow, short && styles.topShort]}>
+            {narrow ? (
+              <>
+                <View style={styles.topRow}>
+                  <IconBtn onPress={onClose} label="Back"><ChevronLeft size={24} color={ic} /></IconBtn>
+                  <View style={{ flex: 1 }} />
+                  {actions}
                 </View>
-              ) : live && channel?.tagline ? (
-                <Text style={styles.meta}>{channel.tagline}</Text>
-              ) : null}
-              {movie && (movie.director?.length || movie.cast?.length) ? (
-                <Text style={styles.meta} numberOfLines={1}>
-                  {[movie.director?.length ? `Directed by ${movie.director.join(', ')}` : '', movie.cast?.length ? `With ${movie.cast.slice(0, 4).join(', ')}` : '']
-                    .filter(Boolean)
-                    .join('   ·   ')}
-                </Text>
-              ) : null}
-            </View>
-            {stream?.format !== 'youtube' && (cast.available || casting) ? (
-              <IconBtn onPress={() => (casting ? stopCasting() : connectCast())} label={casting ? 'Stop casting' : 'Cast to TV'}>
-                <Cast size={22} color={casting ? colors.gold : ic} />
-              </IconBtn>
-            ) : null}
-            {Platform.OS === 'web' && airPlaySupported() ? (
-              <IconBtn onPress={() => setAirplay((n) => n + 1)} label="AirPlay to TV">
-                <Airplay size={22} color={ic} />
-              </IconBtn>
-            ) : null}
-            {Platform.OS === 'ios' ? <AirPlayNative /> : null}
-            {item.kind === 'episode' && item.index + 1 < item.show.episodes.length ? (
-              <TextBtn label="Next episode" icon={<ChevronDown size={18} color={ic} style={{ transform: [{ rotate: '-90deg' }] }} />} onPress={() => onChange({ ...item, index: item.index + 1, fromStart: true })} />
-            ) : null}
-            {!casting ? (
-              <IconBtn onPress={() => { setSubMenu((m) => !m); showChrome(); }} label="Subtitles">
-                <Captions size={22} color={subOn ? colors.gold : ic} />
-              </IconBtn>
-            ) : null}
-            {live && channel ? (
-              <IconBtn onPress={() => useUi.getState().openSchedule(channel)} label="Full schedule">
-                <CalendarDays size={22} color={ic} />
-              </IconBtn>
-            ) : null}
-            <IconBtn onPress={() => (live ? toggleFavorite(id) : toggleMovie(item.kind === 'episode' ? item.show.id : id))} label={saved ? 'Remove from My List' : 'Add to My List'}>
-              <Heart size={22} color={saved ? colors.gold : ic} fill={saved ? colors.gold : 'transparent'} />
-            </IconBtn>
+                <View style={styles.topRow}>
+                  {channel?.logo ? <Image source={{ uri: channel.logo }} style={styles.topLogoSmall} contentFit="contain" /> : null}
+                  {info}
+                </View>
+              </>
+            ) : (
+              <>
+                <IconBtn onPress={onClose} label="Back"><ChevronLeft size={24} color={ic} /></IconBtn>
+                {channel?.logo ? <Image source={{ uri: channel.logo }} style={styles.topLogo} contentFit="contain" /> : null}
+                {info}
+                {actions}
+              </>
+            )}
           </View>
 
-          <View style={styles.bottom}>
+          <View style={[styles.bottom, narrow && styles.bottomNarrow, short && styles.bottomShort]}>
             {!live && (
               <Scrubber cur={cur} dur={dur} onSeek={(t) => { doSeek(t); showChrome(); }} />
             )}
-            <View style={styles.controls}>
-              {live ? (
-                <>
-                  <IconBtn onPress={() => go(-1)} label="Previous channel"><ChevronUp size={22} color={ic} /></IconBtn>
-                  <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
-                    {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
-                  </IconBtn>
-                  <IconBtn onPress={() => go(1)} label="Next channel"><ChevronDown size={22} color={ic} /></IconBtn>
-                </>
-              ) : (
-                <>
-                  <IconBtn onPress={() => seekBy(-10)} label="Back 10 seconds"><RotateCcw size={20} color={ic} /></IconBtn>
-                  <IconBtn onPress={doPlayPause} label={isPaused ? 'Play' : 'Pause'} big>
-                    {isPaused ? <Play size={24} color={ic} fill={ic} /> : <Pause size={24} color={ic} fill={ic} />}
-                  </IconBtn>
-                  <IconBtn onPress={() => seekBy(10)} label="Forward 10 seconds"><RotateCw size={20} color={ic} /></IconBtn>
-                </>
-              )}
-              <View style={styles.sep} />
-              <IconBtn onPress={doMute} label={isMuted ? 'Unmute' : 'Mute'}>
-                {isMuted ? <VolumeX size={20} color={ic} /> : <Volume2 size={20} color={ic} />}
-              </IconBtn>
-              <IconBtn onPress={() => doVolume(-0.1)} label="Volume down"><Minus size={18} color={ic} /></IconBtn>
-              <View style={styles.vol}>
-                <View style={[styles.volFill, { width: `${Math.round((isMuted ? 0 : vol) * 100)}%` }]} />
+            {narrow ? (
+              <>
+                <View style={styles.transportRow}>{transport}</View>
+                <View style={styles.controlsRow}>
+                  {muteBtn}
+                  <View style={{ flex: 1 }} />
+                  {screenBtns}
+                </View>
+              </>
+            ) : (
+              <View style={styles.controls}>
+                {transport}
+                <View style={styles.sep} />
+                {muteBtn}
+                <IconBtn onPress={() => doVolume(-0.1)} label="Volume down"><Minus size={18} color={ic} /></IconBtn>
+                <View style={styles.vol}>
+                  <View style={[styles.volFill, { width: `${Math.round((isMuted ? 0 : vol) * 100)}%` }]} />
+                </View>
+                <IconBtn onPress={() => doVolume(0.1)} label="Volume up"><Plus size={18} color={ic} /></IconBtn>
+                <View style={{ flex: 1 }} />
+                {screenBtns}
               </View>
-              <IconBtn onPress={() => doVolume(0.1)} label="Volume up"><Plus size={18} color={ic} /></IconBtn>
-              <View style={{ flex: 1 }} />
-              <TextBtn onPress={() => setFitIdx((i) => (i + 1) % FITS.length)} label={fit.label} icon={<RectangleHorizontal size={18} color={ic} />} />
-              <IconBtn onPress={() => setPip((n) => n + 1)} label="Picture in picture"><PictureInPicture2 size={20} color={ic} /></IconBtn>
-              {isWeb && <IconBtn onPress={toggleFullscreen} label="Fullscreen"><Maximize size={20} color={ic} /></IconBtn>}
-            </View>
+            )}
           </View>
         </>
       )}
@@ -489,6 +544,7 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
         <>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSubMenu(false)} accessibilityLabel="Close subtitles menu" />
           <SubtitleMenu
+            narrow={narrow}
             choice={subLang}
             options={subOpts}
             onPick={(c) => {
@@ -520,7 +576,7 @@ function Scrubber({ cur, dur, onSeek }: { cur: number; dur: number; onSeek(t: nu
   );
 }
 
-function StatusOverlay({ state, title, sources, live }: { state: FailoverState | { kind: 'loading' }; title: string; sources: number; live: boolean }) {
+function StatusOverlay({ state, title, sources, live, small }: { state: FailoverState | { kind: 'loading' }; title: string; sources: number; live: boolean; small?: boolean }) {
   let headline = live ? 'Tuning in' : 'Loading';
   let detail = title;
   if (state.kind === 'retrying') {
@@ -535,9 +591,9 @@ function StatusOverlay({ state, title, sources, live }: { state: FailoverState |
   }
   return (
     <View style={styles.status} pointerEvents="none">
-      <View style={styles.spinner} />
-      <Text style={styles.statusHead}>{headline}</Text>
-      <Text style={styles.statusDetail}>{detail}</Text>
+      {small ? null : <View style={styles.spinner} />}
+      <Text style={[styles.statusHead, small && { fontSize: 18 }]}>{headline}</Text>
+      <Text style={[styles.statusDetail, small && { fontSize: 13, marginTop: 4 }]} numberOfLines={small ? 2 : undefined}>{detail}</Text>
     </View>
   );
 }
@@ -584,9 +640,18 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 16,
     paddingHorizontal: 28, paddingTop: 24, paddingBottom: 48, backgroundColor: 'rgba(0,0,0,0.5)',
   },
+  topNarrow: {
+    flexDirection: 'column', alignItems: 'stretch', gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 22,
+  },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  topShort: { paddingTop: 10, paddingBottom: 14, gap: 12 },
+  bottomShort: { paddingTop: 14, paddingBottom: 10, gap: 8 },
   topLogo: { width: 72, height: 40 },
+  topLogoSmall: { width: 52, height: 32, alignSelf: 'flex-start', marginTop: 2 },
+  info: { flex: 1, minWidth: 0, flexShrink: 1, gap: 6 },
   title: { ...type.h1, color: colors.text, fontSize: 26 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  titleNarrow: { fontSize: 20, lineHeight: 25 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', rowGap: 6 },
   meta: { color: colors.textDim, fontFamily: fonts.bodySemi, fontSize: 13 },
   imdb: {
     color: '#000', backgroundColor: '#F5C518', fontFamily: fonts.bodyBold, fontSize: 12, paddingHorizontal: 6,
@@ -598,7 +663,10 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 28, paddingBottom: 26, paddingTop: 40,
     backgroundColor: 'rgba(0,0,0,0.5)', gap: 14,
   },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  bottomNarrow: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 28, gap: 12 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  transportRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sep: { width: 14 },
   icon: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',

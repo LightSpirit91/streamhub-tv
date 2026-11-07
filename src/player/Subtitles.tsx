@@ -28,12 +28,12 @@ export function useSubtitleFile(url?: string): Cue[] | undefined {
 }
 
 /** Subtitle line drawn over the video (for subtitle files; stream captions are drawn by the player). */
-export function SubtitleOverlay({ cues, time, rtl, raised }: { cues?: Cue[]; time: number; rtl?: boolean; raised?: boolean }) {
+export function SubtitleOverlay({ cues, time, rtl, raised, narrow }: { cues?: Cue[]; time: number; rtl?: boolean; raised?: boolean; narrow?: boolean }) {
   const cue = cues ? cueAt(cues, time) : undefined;
   if (!cue) return null;
   return (
-    <View pointerEvents="none" style={[styles.subWrap, { bottom: raised ? 150 : 48 }]}>
-      <Text style={[styles.subText, rtl && { writingDirection: 'rtl' }]}>{cue.text}</Text>
+    <View pointerEvents="none" style={[styles.subWrap, { bottom: raised ? (narrow ? 210 : 150) : 48 }]}>
+      <Text style={[styles.subText, narrow && { fontSize: 18, lineHeight: 25 }, rtl && { writingDirection: 'rtl' }]}>{cue.text}</Text>
     </View>
   );
 }
@@ -50,10 +50,10 @@ export function subOptions(tracks: StreamTrack[], files?: SubFile[]): SubOption[
 }
 
 /** Subtitles menu in the player: Off, English, Español, Русский, עברית. */
-export function SubtitleMenu({ choice, options, onPick }: { choice: SubChoice; options: SubOption[]; onPick(c: SubChoice): void }) {
+export function SubtitleMenu({ choice, options, onPick, narrow }: { choice: SubChoice; options: SubOption[]; onPick(c: SubChoice): void; narrow?: boolean }) {
   const any = options.some((o) => o.track || o.file);
   return (
-    <View style={styles.menu}>
+    <View style={[styles.menu, narrow && styles.menuNarrow]}>
       <Text style={styles.menuHead}>Subtitles</Text>
       <MenuItem label="Off" active={choice === 'off'} onPress={() => onPick('off')} />
       {SUB_LANGS.map((l) => {
@@ -92,6 +92,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 96, right: 24, width: 320, padding: 14, borderRadius: 16, gap: 2,
     backgroundColor: 'rgba(28,23,25,0.96)', borderWidth: 1, borderColor: colors.lineHi,
   },
+  menuNarrow: { top: 72, left: 16, right: 16, width: undefined },
   menuHead: { color: colors.text, fontFamily: fonts.display, fontSize: 18, marginBottom: 6, marginLeft: 6 },
   menuFoot: { color: colors.textFaint, fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 8, marginHorizontal: 6 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 10, borderWidth: 2, borderColor: 'transparent' },
