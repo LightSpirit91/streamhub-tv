@@ -57,3 +57,14 @@ describe('discovery rules', () => {
     expect(back).toMatchObject({ name: 'CBC News', url: 'https://news.cbc.ca/z.m3u8', tvgId: 'CBCNews.cascript' });
   });
 });
+
+describe('discovery country rule', () => {
+  const c = () => ({ ...ctx(), countries: new Set(['US', 'CA', 'UK', 'RU', 'IL', 'MX', 'INT']) });
+  it('leaves out links marked for countries you do not watch', () => {
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { country: 'ID' }), c())).toBe('other-country');
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { tvgId: 'RCTI.id' }), c())).toBe('other-country');
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { tvgId: 'CNN.us' }), c())).toBeUndefined();
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { country: 'GB' }), c())).toBeUndefined();
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8'), c())).toBeUndefined();
+  });
+});

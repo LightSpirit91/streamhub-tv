@@ -20,6 +20,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Catalog, PlaylistEntry } from '../src/core/types';
 import { parseM3U } from '../src/core/m3u/parseM3U';
+import { PROFILE_COUNTRIES } from '../src/core/catalog/sources';
+import { hostOf, entryCountries } from '../src/core/discovery/screen';
 import { parseSettings } from '../src/core/refresh/settings';
 import { screenEntry, screenRepo, toM3uLine, trustedHosts, type Rejection, type RepoInfo } from '../src/core/discovery/screen';
 import { validateStream } from '../src/core/playback/validate';
@@ -91,8 +93,11 @@ async function main() {
     return;
   }
 
-  const vetted = catalog.channels.flatMap((c) => c.streams.filter((s) => s.source !== 'discovered').map((s) => s.url));
-  const ctx = { trusted: trustedHosts(vetted, D.trustedHosts), excludedHosts: D.excludedHosts, knownUrls: new Set([...catalog.channels.flatMap((c) => c.streams.map((s) => s.url)), ...prevEntries.map((e) => e.url)]) };
+  // Trust only hosts that serve channels of the countries you watch.
+  const vetted = catalog.channels
+    .filter((c) => !c.country || PROFILE_COUNTRIES.has(c.country))
+    .flatMap((c) => c.streams.filter((s) => s.source !== 'discovered').map((s) => s.url));
+  const ctx = { countries: PROFILE_COUNTRIES, trusted: trustedHosts(vetted, D.trustedHosts), excludedHosts: D.excludedHosts, knownUrls: new Set([...catalog.channels.flatMap((c) => c.streams.map((s) => s.url)), ...prevEntries.map((e) => e.url)]) };
 
   // 1. Search.
   const since = new Date(started - 30 * 86_400_000).toISOString().slice(0, 10);
@@ -194,6 +199,9 @@ async function main() {
     `| Reason left out | Count |`,
     `|---|---|`,
     ...Object.entries(rejected).sort((a, b) => b[1] - a[1]).map(([k, n]) => `| ${k} | ${n} |`),
+    ``,
+    `## Sample of links added`,
+    ...accepted.slice(0, 40).map((a) => `- ${a.e.name.slice(0, 60)} (${entryCountries(a.e).join('/') || '?'}) · ${hostOf(a.e.url)} · from ${a.repo}`),
     ``,
     `| Repo | Playlists | Passed rules | Added |`,
     `|---|---|---|---|`,

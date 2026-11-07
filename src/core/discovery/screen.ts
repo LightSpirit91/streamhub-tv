@@ -19,7 +19,7 @@ import { isBannedStream } from '../catalog/normalize';
 
 export type Rejection =
   | 'repo-ppv' | 'repo-excluded' | 'repo-known-source' | 'unsafe' | 'banned' | 'host-not-trusted' | 'host-excluded'
-  | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
+  | 'other-country' | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
 
 /** PPV / pay-TV restream projects and pirate sports sites (names, descriptions, topics, hosts). */
 const PPV = /ppv|pay[ -]?per[ -]?view|streamed\.su|streamed[._-]?(su|pk)|crack ?streams?|meth ?streams?|buff ?streams?|sportsurge|totalsportek|daddy ?live|dlhd|thetvapp|tvpass|stream ?east|methstream|xtream|stalker|mac[ _-]?portal|m3u ?premium|premium ?iptv|vip ?iptv|cracked|warez|pirat/i;
@@ -65,6 +65,8 @@ export function screenRepo(r: RepoInfo, excluded: string[]): Rejection | undefin
 
 export interface ScreenContext {
   trusted: Set<string>;
+  /** Countries you watch (PROFILE_COUNTRIES). Links marked for another country are left out. */
+  countries?: Set<string>;
   excludedHosts: string[];
   knownUrls: Set<string>;
 }
@@ -80,12 +82,24 @@ export function screenEntry(e: PlaylistEntry, ctx: ScreenContext): Rejection | u
   const host = hostOf(url);
   if (PPV_HOSTS.test(host) || PPV.test(e.name)) return PPV_HOSTS.test(host) ? 'repo-ppv' : 'ppv-name';
   if (ctx.excludedHosts.some((h) => host === h || host.endsWith(`.${h}`))) return 'host-excluded';
+  if (ctx.countries) {
+    const cc = entryCountries(e);
+    if (cc.length && !cc.some((c) => ctx.countries!.has(c))) return 'other-country';
+  }
   if (e.userAgent || e.referrer || e.attrs['http-referrer'] || e.attrs['http-user-agent']) return 'needs-faked-headers';
   if (ACCOUNT.test(url)) return 'account-link';
   if (EXPIRING.test(url)) return 'expiring-link';
   if (!ctx.trusted.has(trustKey(host)) && !ctx.trusted.has(host)) return 'host-not-trusted';
   if (ctx.knownUrls.has(url)) return 'duplicate';
   return undefined;
+}
+
+/** Countries a playlist entry says it is for: tvg-country, or the tvg-id suffix ("CNN.us"). */
+export function entryCountries(e: PlaylistEntry): string[] {
+  const out = (e.country ?? '').split(/[;,\s]+/).map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2,3}$/.test(c));
+  const suffix = /\.([a-z]{2})(@[\w-]+)?$/i.exec(e.tvgId ?? '')?.[1];
+  if (!out.length && suffix) out.push(suffix.toUpperCase());
+  return out.map((c) => (c === 'GB' ? 'UK' : c));
 }
 
 /** Trusted hosts: where the vetted catalog already plays from, plus your own list. */
