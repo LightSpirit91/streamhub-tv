@@ -49,7 +49,7 @@ async function main() {
       for (let d = 0; d < 4; d++) {
         const r = await safeGet(url, { Origin: 'https://lightspirit91.github.io' }, { maxBytes: 64_000 });
         console.log(`depth ${d} url ${r.finalUrl.slice(0, 140)}\n  status ${r.status} type ${r.type} enc ${r.headers['content-encoding'] ?? '-'} len ${r.bytes.length} hex ${hex(r.bytes)} text ${show(r.bytes)}`);
-        if (d > 0) console.log('  lines:', JSON.stringify(new TextDecoder().decode(r.bytes).split('\\n').slice(0, 14)));
+        if (d > 0) console.log('  lines:', JSON.stringify(new TextDecoder().decode(r.bytes).split('\n').slice(0, 14)));
         const t = new TextDecoder().decode(r.bytes);
         if (/#EXT-X-KEY/.test(t)) console.log('  has EXT-X-KEY:', /#EXT-X-KEY:[^\n]*/.exec(t)?.[0].slice(0, 80));
         const n = nextUri(t, r.finalUrl);
