@@ -32,7 +32,7 @@ function mergeSameName(map: Map<string, Channel>) {
 const SPOTLIGHT_SIZE = 24;
 
 export interface SourceBatch {
-  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag' | 'country' | 'byName' | 'deny'>;
+  source: Pick<PlaylistSource, 'id' | 'countryFilter' | 'tag' | 'country' | 'byName' | 'deny' | 'nameFilter'>;
   entries: PlaylistEntry[];
 }
 
@@ -58,6 +58,7 @@ export function buildCatalog(batches: SourceBatch[], now = Date.now()): Catalog 
       // the lineup's internal ids so the same channel from two lists becomes one.
       const e = source.byName ? { ...raw, tvgId: undefined, country: raw.country ?? source.country } : raw;
       const info = parseName(e.name);
+      if (source.nameFilter && !source.nameFilter.test(info.clean)) continue;
       const country = (e.country === 'GB' ? 'UK' : e.country) ?? countryFromTvgId(e.tvgId) ?? sourceCountry;
       if (source.countryFilter && !source.countryFilter.has(country ?? 'INT')) continue;
 

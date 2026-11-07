@@ -459,3 +459,18 @@ describe('switchable channel sources', () => {
     expect(r[0].streams.map((s) => s.source)).toEqual(['free-tv']);
   });
 });
+
+describe('sports channels from lineups abroad', () => {
+  it('keeps only sports and fight channels, merging with ones already listed', async () => {
+    const { SPORTS_NAMES } = await import('../catalog/sources');
+    const e = (name: string, url: string) => ({ name, url, groups: [] as string[], attrs: {} });
+    const c = buildCatalog([
+      { source: { id: 'iptv-org:raw:us_pluto' }, entries: [e('UFC', 'https://jmp2.uk/plu-us-ufc.m3u8')] },
+      { source: { id: 'iptv-org:raw:de_pluto', nameFilter: SPORTS_NAMES }, entries: [e('UFC', 'https://jmp2.uk/plu-de-ufc.m3u8'), e('Pluto TV Krimi', 'https://jmp2.uk/plu-de-krimi.m3u8'), e('DAZN Darts x Pluto TV', 'https://jmp2.uk/plu-de-darts.m3u8')] },
+    ]);
+    expect(c.channels.map((x) => x.name).sort()).toEqual(['DAZN Darts x Pluto TV', 'UFC']);
+    expect(c.channels.find((x) => x.name === 'UFC')!.streams).toHaveLength(2); // German link is a backup
+    expect(SPORTS_NAMES.test('Extreme Makeover Home Edition')).toBe(false);
+    expect(['GLORY Kickboxing', 'Bellator MMA', 'NHL Network', 'Willow Sports', 'Top Rank Classics'].every((n) => SPORTS_NAMES.test(n))).toBe(true);
+  });
+});

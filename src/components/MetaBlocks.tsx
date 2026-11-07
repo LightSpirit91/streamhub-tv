@@ -1,9 +1,7 @@
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { ExternalLink, Play, User } from 'lucide-react-native';
-import type { CastMember, FreeLink, WatchInfo } from '../core/meta/tmdb';
-import { Button } from '../ui/primitives';
-import { PROVIDER_LABEL } from '../core/meta/tmdb';
+import { User } from 'lucide-react-native';
+import type { CastMember } from '../core/meta/tmdb';
 import { colors, fonts } from '../ui/theme';
 
 /** Horizontal cast row with photos (TMDB). */
@@ -24,66 +22,6 @@ export function CastRow({ cast }: { cast?: CastMember[] }) {
         ))}
       </ScrollView>
     </View>
-  );
-}
-
-/** "Where to watch in Canada": provider logos grouped by free / subscription / rent. */
-export function WhereToWatch({ watch }: { watch?: WatchInfo }) {
-  if (!watch?.providers.length) return null;
-  const canOpen = !!watch.link && !Platform.isTV;
-  return (
-    <View style={{ gap: 10 }}>
-      <Text style={styles.head}>Also available in Canada</Text>
-      <View style={styles.providers}>
-        {watch.providers.slice(0, 10).map((p) => (
-          <Pressable
-            key={`${p.name}-${p.type}`}
-            disabled={!canOpen}
-            onPress={() => watch.link && Linking.openURL(watch.link)}
-            style={styles.provider}
-            accessibilityLabel={`${p.name}, ${PROVIDER_LABEL[p.type]}`}
-          >
-            {p.logo ? <Image source={{ uri: p.logo }} style={styles.pLogo} contentFit="cover" /> : null}
-            <View>
-              <Text style={styles.provName} numberOfLines={1}>{p.name}</Text>
-              <Text style={[styles.provType, (p.type === 'free' || p.type === 'ads') && { color: colors.ok }]}>{PROVIDER_LABEL[p.type]}</Text>
-            </View>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** Short label for a card or a button: "Tubi", "Pluto TV" ... */
-export const freeLabel = (links?: FreeLink[]) => (links?.length ? `Free on ${links[0].name}` : undefined);
-
-/**
- * Titles that stream free (or free with ads) on another service: one button
- * per service. On a TV there is no browser, so it says which app to open.
- */
-export function FreeOnButtons({ links, title, preferredFocus }: { links?: FreeLink[]; title: string; preferredFocus?: boolean }) {
-  if (!links?.length) return null;
-  if (Platform.isTV) {
-    return (
-      <Text style={styles.tvHint}>
-        {`Free on ${links.map((l) => l.name).join(', ')}. Open the ${links[0].name} app and search “${title}”.`}
-      </Text>
-    );
-  }
-  return (
-    <>
-      {links.slice(0, 3).map((l, i) => (
-        <Button
-          key={l.name}
-          variant={i === 0 ? 'primary' : 'glass'}
-          label={`Watch free on ${l.name}`}
-          icon={i === 0 ? <Play size={18} color="#17110A" fill="#17110A" /> : <ExternalLink size={16} color={colors.text} />}
-          onPress={() => Linking.openURL(l.url)}
-          preferredFocus={preferredFocus && i === 0}
-        />
-      ))}
-    </>
   );
 }
 

@@ -42,6 +42,8 @@ export interface PlaylistSource {
   byName?: boolean;
   /** Playlist format. Default m3u. */
   format?: 'm3u' | 'famelack';
+  /** Only entries whose name matches are kept (e.g. sports channels from another country's lineup). */
+  nameFilter?: RegExp;
   /** Block list: every stream URL in this playlist is removed from all other sources. */
   deny?: boolean;
   /** Loaded only when the user opens "Explore All". */
@@ -102,6 +104,16 @@ function category(cat: string, label: string): PlaylistSource {
   };
 }
 
+/** Sports and fight channels by name (free ad-supported lineups from other countries). */
+export const SPORTS_NAMES =
+  /\b(UFC|PFL|BKFC|Bellator|ONE Championship|Top ?Rank|Golden ?Boy|DAZN|Fight|Boxing|Boxeo|MMA|Kickbox(ing)?|GLORY|Wrestling|Combat|Lucha|Bare ?Knuckle|Sports?|Deportes?|NFL|NBA|NHL|MLB|MLS|Golf|Tennis|Racing|Motor ?sports?|Speed|Rugby|Cricket|F[uú]tbol|Football|Soccer|Olympic|Billiards?|Poker|Darts|Snooker|Cycling|Fishing|Xtreme?|Xtrem|E-?Sports?)\b/i;
+
+/** Licensed free ad-supported lineups in other countries; only their sports channels are taken. */
+const FAST_SPORTS_ABROAD = [
+  'at_pluto', 'br_pluto', 'ch_pluto', 'de_pluto', 'dk_pluto', 'es_pluto', 'fr_pluto', 'it_pluto', 'no_pluto', 'se_pluto',
+  'de_rakuten', 'es_rakuten', 'fi_rakuten', 'fr_rakuten', 'it_rakuten', 'pl_rakuten', 'in_distro',
+];
+
 export const SOURCES: PlaylistSource[] = [
   ...country('us', 'United States'),
   ...country('ca', 'Canada'),
@@ -147,6 +159,13 @@ export const SOURCES: PlaylistSource[] = [
       `https://cdn.jsdelivr.net/gh/famelack/famelack-channels@main/tv/raw/countries/${cc}.json`,
     ],
     format: 'famelack' as const,
+  })),
+  // Sports and fight channels from Pluto TV, Rakuten TV and Distro lineups abroad (licensed, free with ads).
+  ...FAST_SPORTS_ABROAD.map((file) => ({
+    id: `iptv-org:raw:${file}`,
+    label: `Sports from ${file}`,
+    urls: [`${IPTV_ORG_RAW}/${file}.m3u`],
+    nameFilter: SPORTS_NAMES,
   })),
   // Samsung TV Plus and Plex are not shown. Their lineups are loaded only as
   // block lists: the same filler streams also appear inside the big country
