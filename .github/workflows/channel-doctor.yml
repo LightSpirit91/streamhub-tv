@@ -52,6 +52,8 @@ jobs:
           cp prev/*.json prev/*.md prev/*.csv dist/ 2>/dev/null || true
           # Translated subtitle files made on earlier nights.
           cp -r prev/subs dist/ 2>/dev/null || true
+          # Week-long schedules collected by the TV Guide Plus job.
+          cp -r prev/epg-grab dist/ 2>/dev/null || true
       - run: npx tsx scripts/channel-doctor.ts --check --previous prev --out dist
       - name: Channel previews
         continue-on-error: true

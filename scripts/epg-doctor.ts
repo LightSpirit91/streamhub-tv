@@ -12,7 +12,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { rmSync } from 'node:fs';
+import { createReadStream, readdirSync, rmSync } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import { Readable } from 'node:stream';
 import type { Catalog } from '../src/core/types';
@@ -50,7 +50,10 @@ async function guideSources(): Promise<string[]> {
   }
   // Israel and the big US/Canada guides first; the free-channel guides last.
   const rank = (f: string) => (/_(IL|US|CA)/.test(f) ? 0 : /_(RU|KZ|UA|viva)/.test(f) ? 1 : 2);
-  return [...files.sort((a, b) => rank(a) - rank(b)).map((f) => `${EPGSHARE}/${f}`), ...MJH, ...EPGPW];
+  // Guides collected with iptv-org/epg come first: exact channel ids, usually a full week.
+  const grabDir = join(OUT, 'epg-grab');
+  const grabbed = existsSync(grabDir) ? readdirSync(grabDir).filter((f) => /\.xml(\.gz)?$/.test(f)).map((f) => `file:${join(grabDir, f)}`) : [];
+  return [...grabbed, ...files.sort((a, b) => rank(a) - rank(b)).map((f) => `${EPGSHARE}/${f}`), ...MJH, ...EPGPW];
 }
 
 /**
@@ -79,9 +82,15 @@ export async function processSource(
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 900_000);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.1' } });
-    if (!res.ok || !res.body) return { error: `HTTP ${res.status}` };
-    let stream: NodeJS.ReadableStream = Readable.fromWeb(res.body as never);
+    let stream: NodeJS.ReadableStream;
+    if (url.startsWith('file:')) {
+      // Guides collected tonight with iptv-org/epg (dist/epg-grab).
+      stream = createReadStream(url.slice(5));
+    } else {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.1' } });
+      if (!res.ok || !res.body) return { error: `HTTP ${res.status}` };
+      stream = Readable.fromWeb(res.body as never);
+    }
     if (url.endsWith('.gz')) stream = stream.pipe(createGunzip());
     stream.setEncoding?.('utf8');
 

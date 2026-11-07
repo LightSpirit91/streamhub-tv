@@ -1,0 +1,103 @@
+# Week-long TV schedules collected with iptv-org/epg (open source) for the
+# channels the regular guides don't cover well. Runs after the nightly update.
+#
+# Safety: the third-party toolkit runs in its own job with read-only
+# permissions and no repository credentials, pinned to one reviewed commit,
+# with package install scripts disabled. It only hands schedule files to the
+# publish job, which runs StreamHub's own code.
+name: TV Guide Plus
+
+on:
+  schedule:
+    - cron: '35 10 * * *' # ~5:35 AM Toronto
+  workflow_dispatch: {}
+
+concurrency:
+  group: catalog-branch
+  cancel-in-progress: false
+
+env:
+  EPG_COMMIT: ae9cc64f9497c602ec2f6e17857ae38b3aa1ff05 # iptv-org/epg, reviewed 2026-11-07
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog (read only)
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" current
+      - name: Get iptv-org/epg at the pinned commit
+        run: |
+          git init -q epg && cd epg
+          git fetch -q --depth 1 https://github.com/iptv-org/epg.git "$EPG_COMMIT"
+          git checkout -q FETCH_HEAD
+          npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx tsx scripts/epg-grab-plan.ts --catalog current/catalog.json --week current/epg-week --sites epg/sites --out grab --max 900
+      - name: Collect schedules (all sites at once, 15 minutes each at most)
+        continue-on-error: true
+        run: |
+          mkdir -p out
+          cd epg
+          while read -r site; do
+            [ -z "$site" ] && continue
+            ( timeout 900 npm run grab --- --channels="../grab/$site.channels.xml" --output="../out/$site.xml" --days=7 --maxConnections=6 > "../grab/$site.log" 2>&1; echo "$site exit $?" ) &
+          done < ../grab/sites.txt
+          wait
+          cd ../out
+          for f in *.xml; do [ -s "$f" ] && gzip -f "$f" || rm -f "$f"; done
+          ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: epg-grab
+          path: out/*.xml.gz
+          retention-days: 2
+          if-no-files-found: warn
+      - run: tail -n 3 grab/*.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+  publish:
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Load current catalog
+        run: git clone -q --depth 1 -b catalog "https://github.com/${{ github.repository }}.git" dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: epg-grab
+          path: grabbed
+        continue-on-error: true
+      - name: Keep only schedule files
+        run: |
+          rm -rf dist/epg-grab && mkdir -p dist/epg-grab
+          find grabbed -maxdepth 1 -type f -name '*.xml.gz' -exec cp {} dist/epg-grab/ \; 2>/dev/null || true
+          ls -la dist/epg-grab
+      - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
+      - name: Publish
+        run: |
+          cd dist
+          rm -rf .git
+          git init -q -b catalog
+          git config user.name "tv-guide-plus"
+          git config user.email "tv-guide-plus@users.noreply.github.com"
+          git add -A
+          git commit -qm "TV guide plus $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
+      - run: cat dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
