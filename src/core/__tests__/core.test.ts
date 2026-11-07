@@ -404,3 +404,23 @@ describe('streams the browser may not load (no CORS)', () => {
     expect(channelsForDevice([ntv], safari)[0].streams[0].score).toBe(100);
   });
 });
+
+describe('iptv-org blocklist and closed channels', () => {
+  it('reads the blocklist safely and matches our ids', async () => {
+    const { blockedIds, baseId } = await import('../catalog/blocklist');
+    const b = blockedIds([{ channel: 'BeIN1.qa', reason: 'dmca' }, { channel: 'X.us', reason: 'nsfw' }, null, { nope: 1 }]);
+    expect(b.has(baseId('bein1.qa@SD'))).toBe(true);
+    expect(b.has('x.us')).toBe(true);
+    expect(blockedIds({ error: 'down' }).size).toBe(0);
+  });
+  it('flags channels the database lists as closed', async () => {
+    const { enrichChannels } = await import('../catalog/enrich');
+    const ch = (id: string) => ({ id, name: id, categories: [], hubs: [], streams: [], popularity: 0, bestHeight: 0, search: '' });
+    const r = enrichChannels([ch('old.us'), ch('live.us'), ch('future.us')], [
+      { id: 'Old.us', name: 'Old', closed: '2020-01-01' },
+      { id: 'Live.us', name: 'Live' },
+      { id: 'Future.us', name: 'Future', closed: '2999-01-01' },
+    ], []);
+    expect([...r.closed]).toEqual(['old.us']);
+  });
+});

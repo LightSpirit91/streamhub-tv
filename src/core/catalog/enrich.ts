@@ -56,7 +56,7 @@ export function tagline(categories: string[], network?: string, country?: string
   return parts.length ? parts.join(' · ') : undefined;
 }
 
-export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLogo[]): { logos: number; taglines: number } {
+export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLogo[], now = Date.now()): { logos: number; taglines: number; closed: Set<string> } {
   const byId = new Map(db.map((c) => [c.id.toLowerCase(), c]));
   const byName = new Map<string, DbChannel[]>();
   for (const c of db) {
@@ -74,6 +74,7 @@ export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLo
 
   let nLogos = 0;
   let nTag = 0;
+  const closed = new Set<string>();
   for (const ch of channels) {
     // Pluto TV streams carry the channel id: jmp2.uk/plu-<id>.m3u8
     const pluto = ch.streams.map((st) => /plu-([0-9a-f]{24})/.exec(st.url)?.[1]).find(Boolean);
@@ -86,6 +87,8 @@ export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLo
       const cands = byName.get(norm(ch.name)) ?? [];
       d = cands.find((c) => c.country === ch.country) ?? (cands.length === 1 ? cands[0] : cands.find((c) => /pluto|samsung|roku|plex|xumo|tubi/i.test(c.network ?? '')));
     }
+    // The channel database records shut-down channels with a closing date.
+    if (d?.closed && Date.parse(d.closed) < now) closed.add(ch.id);
     if (!d || d.is_nsfw === 'TRUE') {
       ch.tagline ??= tagline(ch.categories, ch.network, ch.country);
       if (ch.tagline) nTag++;
@@ -104,5 +107,5 @@ export function enrichChannels(channels: Channel[], db: DbChannel[], logos: DbLo
     ch.tagline = tagline(cats.length ? cats : ch.categories, d.network, ch.country ?? d.country);
     if (ch.tagline) nTag++;
   }
-  return { logos: nLogos, taglines: nTag };
+  return { logos: nLogos, taglines: nTag, closed };
 }

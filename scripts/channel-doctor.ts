@@ -22,6 +22,7 @@ import { channelsCsv, channelsMarkdown } from './channel-list';
 import { parseCsv } from '../src/core/csv';
 import { enrichChannels, type DbChannel, type DbLogo } from '../src/core/catalog/enrich';
 import { updateGraveyard, type Graveyard } from '../src/core/catalog/graveyard';
+import { baseId, blockedIds } from '../src/core/catalog/blocklist';
 import { existsSync, readFileSync } from 'node:fs';
 import { isBannedStream, youtubeId } from '../src/core/catalog/normalize';
 
@@ -36,7 +37,7 @@ async function enrich(channels: Channel[]) {
     return enrichChannels(channels, parseCsv(c) as unknown as DbChannel[], parseCsv(l) as unknown as DbLogo[]);
   } catch (e) {
     console.warn('enrich failed', e);
-    return { logos: 0, taglines: 0 };
+    return { logos: 0, taglines: 0, closed: new Set<string>() };
   }
 }
 
@@ -111,6 +112,23 @@ async function main() {
   for (const s of SOURCES) if (!s.lazy && !s.deny && !catalog.sources.includes(s.id)) failed.push(s.id);
 
   const enriched = await enrich(catalog.channels);
+  // iptv-org blocklist (copyright claims, adult) and channels the database marks as closed.
+  let blocked = new Set<string>();
+  for (const url of ['https://iptv-org.github.io/api/blocklist.json', 'https://raw.githubusercontent.com/iptv-org/api/gh-pages/blocklist.json']) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) {
+        blocked = blockedIds(await r.json());
+        if (blocked.size) break;
+      }
+    } catch {
+      // next mirror; if none answers, nothing is removed tonight
+    }
+  }
+  const beforeCount = catalog.channels.length;
+  catalog.channels = catalog.channels.filter((c) => !blocked.has(baseId(c.id)) && !enriched.closed.has(c.id));
+  const removedBlock = beforeCount - catalog.channels.length;
+  console.log(`blocklist ${blocked.size} entries, closed ${enriched.closed.size}: removed ${removedBlock} channels`);
   // "Just Added": channels we have never listed before get today's date;
   // known channels keep the date they first appeared.
   const prevCat = readJson<Catalog>(`${PREV}/catalog.json`);
@@ -159,6 +177,7 @@ async function main() {
     `- With logo: ${catalog.channels.filter((c) => c.logo).length} · with description: ${catalog.channels.filter((c) => c.tagline).length} (database matched ${enriched.logos} logos)`,
     `- Streams: ${catalog.channels.reduce((n, c) => n + c.streams.length, 0)}`,
     `- 4K: ${q(2160)} · 1080p+: ${q(1080)} · 720p+: ${q(720)}`,
+    `- Removed: ${removedBlock} (iptv-org blocklist ${blocked.size} entries, closed channels ${enriched.closed.size})`,
     `- Sources loaded: ${catalog.sources.length}/${SOURCES.filter((s) => !s.lazy && !s.deny).length}`,
     failed.length ? `- Sources unreachable: ${failed.join(', ')}` : '',
     tally ? `- Probe: ${tally.ok} ok, ${tally.locked} geo-locked (kept), ${tally.timeout} timeout (kept), ${tally.dead} dead (removed)` : '- Probe: skipped',
