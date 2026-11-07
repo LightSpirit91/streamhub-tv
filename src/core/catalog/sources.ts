@@ -60,11 +60,18 @@ export const PROFILE_COUNTRIES = new Set<string>([
 
 /** iptv-org splits big countries into provider files on the raw mirror. */
 const RAW_PROVIDER_FILES: Record<string, string[]> = {
-  us: ['us', 'us_pluto', 'us_roku', 'us_tubi', 'us_xumo', 'us_stirr', 'us_local', 'us_firetv', 'us_pbs', 'us_cbsn', 'us_abcnews', 'us_canelatv', 'us_distro', 'us_vizio', 'us_tcl', 'us_sofast'],
+  us: [
+    'us', 'us_pluto', 'us_roku', 'us_tubi', 'us_xumo', 'us_stirr', 'us_local', 'us_firetv', 'us_pbs', 'us_cbsn', 'us_abcnews',
+    'us_canelatv', 'us_distro', 'us_vizio', 'us_tcl', 'us_sofast', 'us_30a', 'us_3abn', 'us_afrolandtv', 'us_amagi',
+    'us_cineversetv', 'us_frequency', 'us_glewedtv', 'us_klowdtv', 'us_malimartv', 'us_uplynk', 'us_vegasplus', 'us_wcetv',
+    'us_wfmz', 'us_wowza',
+  ],
   ca: ['ca', 'ca_pluto', 'ca_stingray'],
-  ru: ['ru', 'ru_smotrim', 'ru_ntv', 'ru_rt', 'ru_tvteleport', 'ru_televizor24', 'ru_zabava'],
+  uk: ['uk', 'uk_bbc', 'uk_pluto', 'uk_rakuten', 'uk_distro', 'uk_sportstribal'],
+  ru: ['ru', 'ru_smotrim', 'ru_ntv', 'ru_rt', 'ru_tvteleport', 'ru_televizor24', 'ru_zabava', 'ru_15plusmg', 'ru_bonustv', 'ru_catcast', 'ru_tvbricks'],
   il: ['il'],
-  mx: ['mx', 'mx_pluto', 'mx_multimedios'],
+  mx: ['mx', 'mx_pluto', 'mx_multimedios', 'mx_amagi'],
+  gt: ['gt', 'gt_streamhispanatv'],
 };
 
 function country(cc: string, label: string): PlaylistSource[] {
@@ -98,10 +105,11 @@ function category(cat: string, label: string): PlaylistSource {
 export const SOURCES: PlaylistSource[] = [
   ...country('us', 'United States'),
   ...country('ca', 'Canada'),
+  ...country('uk', 'United Kingdom'),
   ...country('ru', 'Russia'),
   ...country('il', 'Israel'),
   ...country('mx', 'Mexico'),
-  ...LATAM.filter((c) => c !== 'MX').map((c) => country(c.toLowerCase(), c)[0]),
+  ...LATAM.filter((c) => c !== 'MX').flatMap((c) => (RAW_PROVIDER_FILES[c.toLowerCase()] ? country(c.toLowerCase(), c) : [country(c.toLowerCase(), c)[0]])),
   category('sports', 'Sports (worldwide)'),
   category('movies', 'Movies (worldwide)'),
   category('documentary', 'Documentary (worldwide)'),
@@ -143,7 +151,7 @@ export const SOURCES: PlaylistSource[] = [
   // Samsung TV Plus and Plex are not shown. Their lineups are loaded only as
   // block lists: the same filler streams also appear inside the big country
   // playlists under other hosts, and this removes them there too.
-  ...['us_samsung', 'ca_samsung', 'mx_samsung', 'us_plex'].map((file) => ({
+  ...['us_samsung', 'ca_samsung', 'mx_samsung', 'uk_samsung', 'us_plex'].map((file) => ({
     id: `deny:${file}`,
     label: `Blocked: ${file}`,
     urls: [`${IPTV_ORG_RAW}/${file}.m3u`],
