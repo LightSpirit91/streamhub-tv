@@ -22,17 +22,23 @@ let client: OpenSubtitles | null = null;
 const json = (body: unknown, status: number, cors: Record<string, string>) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...cors } });
 
-/** Error answers carry only a reason the app can show; never upstream details. */
-function errorBody(e: unknown): [Record<string, unknown>, number] {
+/**
+ * Error answers carry only a reason the app can show plus a short diagnostic
+ * label (stage / upstream status / exception name). Never secrets, headers,
+ * response bodies or tokens.
+ */
+export function errorBody(e: unknown): [Record<string, unknown>, number, string] {
   if (e instanceof OsError) {
     const i = e.info;
-    if (i.kind === 'quota') return [{ error: 'quota', resetTime: i.resetTime }, 429];
-    if (i.kind === 'busy') return [{ error: 'busy' }, 503];
-    if (i.kind === 'notfound') return [{ error: 'notfound' }, 404];
-    if (i.kind === 'auth') return [{ error: 'unavailable' }, 503];
-    return [{ error: 'unavailable' }, 502];
+    if (i.kind === 'quota') return [{ error: 'quota', resetTime: i.resetTime }, 429, 'quota'];
+    if (i.kind === 'busy') return [{ error: 'busy' }, 503, 'busy'];
+    if (i.kind === 'notfound') return [{ error: 'notfound' }, 404, 'notfound'];
+    if (i.kind === 'auth') return [{ error: 'unavailable', code: 'auth' }, 503, 'auth'];
+    const code = `${i.stage ?? 'upstream'}-${i.status}`;
+    return [{ error: 'unavailable', code }, 502, code];
   }
-  return [{ error: 'unavailable' }, 500];
+  const name = e instanceof Error ? e.name.replace(/[^A-Za-z]/g, '').slice(0, 40) || 'Error' : 'unknown';
+  return [{ error: 'unavailable', code: `exception-${name}` }, 500, `exception-${name}`];
 }
 
 export default {
@@ -67,8 +73,8 @@ export default {
       if (req.method === 'GET' && url.pathname === '/quota') return json({ quota: client.quota }, 200, cors);
       return json({ error: 'not-found' }, 404, cors);
     } catch (e) {
-      const [b, s] = errorBody(e);
-      console.log(`subtitle backend: ${url.pathname} -> ${s}`); // status only, never secrets or tokens
+      const [b, s, label] = errorBody(e);
+      console.log(`subtitle backend: ${url.pathname} -> ${s} ${label}`); // labels only, never secrets, bodies or tokens
       return json(b, s, cors);
     }
   },

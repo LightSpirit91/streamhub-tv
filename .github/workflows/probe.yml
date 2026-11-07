@@ -19,3 +19,5 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx tsx scripts/probe.ts
+        env:
+          SUBTITLES_API_URL: ${{ vars.SUBTITLES_API_URL }}

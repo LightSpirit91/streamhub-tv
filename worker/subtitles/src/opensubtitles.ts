@@ -45,11 +45,32 @@ export type ApiError =
   | { kind: 'quota'; resetTime?: string } // today's free downloads used up
   | { kind: 'busy' } // rate limited
   | { kind: 'notfound' }
-  | { kind: 'upstream'; status: number };
+  | { kind: 'upstream'; status: number; stage?: Stage };
+
+/** Where a failure happened. Safe to log: it never contains secrets or response data. */
+export type Stage = 'login-network' | 'login-json' | 'search-network' | 'search-json' | 'search-shape' | 'download-network' | 'download-json' | 'file-network';
 
 export class OsError extends Error {
   constructor(public info: ApiError) {
     super(info.kind);
+  }
+}
+
+/** Network call that never throws a raw error: failures become labelled OsErrors. */
+async function net(f: Fetch, url: string, init: RequestInit, stage: Stage): Promise<Response> {
+  try {
+    return await f(url, init);
+  } catch {
+    throw new OsError({ kind: 'upstream', status: 0, stage });
+  }
+}
+
+/** JSON body, or a labelled OsError when the reply isn't JSON. */
+async function body<T>(res: Response, stage: Stage): Promise<T> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new OsError({ kind: 'upstream', status: res.status, stage });
   }
 }
 
@@ -99,7 +120,7 @@ interface RawHit {
 /** Best results first: human-made, not hearing-impaired first, most downloaded. */
 export function toResults(data: RawHit[], lang: Lang, max = 8): SubResult[] {
   return data
-    .filter((d) => d.attributes.files?.length && !d.attributes.ai_translated && !d.attributes.machine_translated)
+    .filter((d) => Array.isArray(d.attributes.files) && d.attributes.files.length && Number.isInteger(d.attributes.files[0]?.file_id) && !d.attributes.ai_translated && !d.attributes.machine_translated)
     .filter((d) => (d.attributes.language ?? '').toLowerCase().startsWith(lang))
     .map((d) => ({
       fileId: d.attributes.files![0].file_id,
@@ -124,7 +145,9 @@ export class OpenSubtitles {
   /** Last known download allowance (from login or the last download). */
   quota: { remaining?: number; resetTime?: string } = {};
 
-  constructor(private creds: Creds, private fetcher: Fetch = fetch, private now = () => Date.now()) {}
+  // Cloudflare's fetch must not be called as a method of another object ("Illegal invocation"):
+  // the default wraps it in a plain function.
+  constructor(private creds: Creds, private fetcher: Fetch = (url, init) => fetch(url, init), private now = () => Date.now()) {}
 
   private headers(auth: boolean): Record<string, string> {
     return {
@@ -142,18 +165,18 @@ export class OpenSubtitles {
 
   private async login(): Promise<void> {
     if (this.now() - this.authFailedAt < OpenSubtitles.AUTH_COOLDOWN_MS) throw new OsError({ kind: 'auth' });
-    const res = await this.fetcher(`${DEFAULT_BASE}/login`, {
+    const res = await net(this.fetcher, `${DEFAULT_BASE}/login`, {
       method: 'POST',
       headers: this.headers(false),
       body: JSON.stringify({ username: this.creds.username, password: this.creds.password }),
-    });
+    }, 'login-network');
     if (res.status === 401 || res.status === 403) {
       this.authFailedAt = this.now();
       throw new OsError({ kind: 'auth' });
     }
     if (res.status === 429) throw new OsError({ kind: 'busy' });
-    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status });
-    const j = (await res.json()) as { token?: string; base_url?: string; user?: { remaining_downloads?: number } };
+    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'login-network' });
+    const j = await body<{ token?: string; base_url?: string; user?: { remaining_downloads?: number } }>(res, 'login-json');
     if (!j.token) {
       this.authFailedAt = this.now();
       throw new OsError({ kind: 'auth' });
@@ -170,12 +193,12 @@ export class OpenSubtitles {
   }
 
   /** Authenticated call; on 401 the token is renewed once and the call repeated. */
-  private async call(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  private async call(path: string, init: RequestInit = {}, stage: Stage = 'search-network', retried = false): Promise<Response> {
     await this.ensureToken();
-    const res = await this.fetcher(`${this.base}${path}`, { ...init, headers: this.headers(true) });
+    const res = await net(this.fetcher, `${this.base}${path}`, { ...init, headers: this.headers(true) }, stage);
     if (res.status === 401 && !retried) {
       this.token = '';
-      return this.call(path, init, true);
+      return this.call(path, init, stage, true);
     }
     if (res.status === 429) throw new OsError({ kind: 'busy' });
     return res;
@@ -184,15 +207,18 @@ export class OpenSubtitles {
   async search(q: SearchQuery): Promise<SubResult[]> {
     if (!imdbNum(q.imdbId) || !LANGS.includes(q.lang)) throw new OsError({ kind: 'notfound' });
     const res = await this.call(searchPath(q));
-    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status });
-    const j = (await res.json()) as { data?: RawHit[] };
-    return toResults(j.data ?? [], q.lang);
+    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-network' });
+    const j = await body<{ data?: unknown }>(res, 'search-json');
+    if (j.data != null && !Array.isArray(j.data)) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-shape' });
+    // Skip any entry missing the fields we rely on instead of failing the whole search.
+    const data = ((j.data as RawHit[] | undefined) ?? []).filter((d) => d && typeof d === 'object' && d.attributes && typeof d.attributes === 'object');
+    return toResults(data, q.lang);
   }
 
   /** Downloads one subtitle file (uses one of today's downloads) and returns its text. */
   async download(fileId: number): Promise<{ text: string; remaining?: number; resetTime?: string }> {
     if (this.quota.remaining != null && this.quota.remaining <= 0) throw new OsError({ kind: 'quota', resetTime: this.quota.resetTime });
-    const res = await this.call('/download', { method: 'POST', body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) });
+    const res = await this.call('/download', { method: 'POST', body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) }, 'download-network');
     const j = (await res.json().catch(() => ({}))) as { link?: string; remaining?: number; reset_time_utc?: string; reset_time?: string; message?: string };
     const resetTime = j.reset_time_utc ?? j.reset_time;
     if (res.status === 406 || (res.ok && !j.link && (j.remaining ?? 1) <= 0)) {
@@ -200,10 +226,10 @@ export class OpenSubtitles {
       throw new OsError({ kind: 'quota', resetTime });
     }
     if (res.status === 404) throw new OsError({ kind: 'notfound' });
-    if (!res.ok || !j.link) throw new OsError({ kind: 'upstream', status: res.status });
+    if (!res.ok || !j.link) throw new OsError({ kind: 'upstream', status: res.status, stage: 'download-json' });
     this.quota = { remaining: j.remaining, resetTime };
-    const file = await this.fetcher(j.link, { headers: { 'User-Agent': UA } });
-    if (!file.ok) throw new OsError({ kind: 'upstream', status: file.status });
+    const file = await net(this.fetcher, j.link, { headers: { 'User-Agent': UA } }, 'file-network');
+    if (!file.ok) throw new OsError({ kind: 'upstream', status: file.status, stage: 'file-network' });
     const text = await file.text();
     if (!/-->/.test(text)) throw new OsError({ kind: 'notfound' });
     return { text, remaining: j.remaining, resetTime };

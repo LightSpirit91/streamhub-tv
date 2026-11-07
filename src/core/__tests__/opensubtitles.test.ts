@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OpenSubtitles, OsError, imdbNum, searchPath, toResults } from '../../../worker/subtitles/src/opensubtitles';
-import worker from '../../../worker/subtitles/src/index';
+import worker, { errorBody } from '../../../worker/subtitles/src/index';
 
 const CREDS = { apiKey: 'KEY-SECRET', username: 'USER-SECRET', password: 'PASS-SECRET' };
 type Call = { url: string; method: string; headers: Record<string, string>; body?: string };
@@ -109,5 +109,43 @@ describe('subtitle backend (worker)', () => {
       const t = await r.text();
       expect(t).not.toMatch(/SECRET/);
     }
+  });
+});
+
+describe('subtitle backend on Cloudflare (fixes the 500)', () => {
+  it('works with a fetch that refuses method calls ("Illegal invocation"), like Cloudflare Workers', async () => {
+    const real = globalThis.fetch;
+    const strict = function (this: unknown, url: string) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      const u = String(url);
+      if (u.endsWith('/login')) return Promise.resolve(new Response(JSON.stringify({ token: 'T' })));
+      return Promise.resolve(new Response(JSON.stringify({ data: [hit('es', 9, 1)] })));
+    };
+    globalThis.fetch = strict as typeof fetch;
+    try {
+      const os = new OpenSubtitles(CREDS); // default fetcher, as in the Worker
+      expect((await os.search({ imdbId: 'tt0051744', lang: 'es' })).map((r) => r.fileId)).toEqual([9]);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it('turns network errors, non-JSON replies and odd shapes into labelled errors', async () => {
+    const down = new OpenSubtitles(CREDS, async () => { throw new TypeError('network down'); });
+    await expect(down.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { kind: 'upstream', stage: 'login-network' } });
+    const html = new OpenSubtitles(CREDS, async () => new Response('<html>maintenance</html>', { status: 200 }));
+    await expect(html.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { stage: 'login-json' } });
+    const { f } = fake((c) => (c.url.endsWith('/login') ? { status: 200, body: { token: 'T' } } : { status: 200, body: { data: { not: 'a list' } } }));
+    await expect(new OpenSubtitles(CREDS, f).search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { stage: 'search-shape' } });
+    const { f: f2 } = fake((c) => (c.url.endsWith('/login') ? { status: 200, body: { token: 'T' } } : { status: 200, body: { data: [null, { attributes: { language: 'en', files: 'x' } }, hit('en', 4, 2)] } }));
+    expect((await new OpenSubtitles(CREDS, f2).search({ imdbId: '5', lang: 'en' })).map((r) => r.fileId)).toEqual([4]);
+  });
+
+  it('error answers carry only safe labels', () => {
+    const [b, status, label] = errorBody(new TypeError('Illegal invocation: KEY-SECRET Bearer T1'));
+    expect(status).toBe(500);
+    expect(label).toBe('exception-TypeError');
+    expect(JSON.stringify(b)).not.toMatch(/SECRET|Bearer|Illegal/);
+    expect(errorBody(new OsError({ kind: 'upstream', status: 502, stage: 'search-json' }))).toEqual([{ error: 'unavailable', code: 'search-json-502' }, 502, 'search-json-502']);
   });
 });
