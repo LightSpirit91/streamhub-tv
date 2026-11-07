@@ -1,25 +1,29 @@
 /**
- * One login check against OpenSubtitles from GitHub with the corrected
- * GitHub secrets. Prints only the HTTP status, whether a token came back,
- * the allowance numbers, and OpenSubtitles' failed/remaining login counters.
- * Never prints the key, username, password, token or the full reply.
+ * Credential sanity check, printing yes/no flags only (never values or
+ * lengths): stray spaces / line breaks, email instead of username, and
+ * whether the API key is accepted (a request that needs no login). Logs in
+ * once only if trimming spaces changes a value.
  */
 async function main() {
-  const KEY = process.env.OPENSUBTITLES_API_KEY;
-  const USER = process.env.OPENSUBTITLES_USERNAME;
-  const PASS = process.env.OPENSUBTITLES_PASSWORD;
-  console.log(`secrets present: key ${!!KEY}, username ${!!USER}, password ${!!PASS}`);
-  if (!KEY || !USER || !PASS) return;
-  const H = { 'Api-Key': KEY, 'User-Agent': 'StreamHub v1.0', 'Content-Type': 'application/json', Accept: 'application/json' };
-  const r = await fetch('https://api.opensubtitles.com/api/v1/login', { method: 'POST', headers: H, body: JSON.stringify({ username: USER, password: PASS }) });
-  const type = r.headers.get('content-type') ?? '';
-  const j = (await r.json().catch(() => ({}))) as { token?: string; message?: string; user?: { allowed_downloads?: number; remaining_downloads?: number } };
-  const counters = /failed:\s*\d+\s*remaining:\s*\d+/i.exec(j.message ?? '')?.[0] ?? '-';
-  const kind = /invalid username\/password/i.test(j.message ?? '') ? 'wrong username or password' : /api.?key/i.test(j.message ?? '') ? 'API key problem' : /lock|block/i.test(j.message ?? '') ? 'account locked' : '-';
-  console.log(`login: HTTP ${r.status} · json ${type.includes('json')} · token ${!!j.token} · reason ${kind} · counters ${counters} · downloads ${j.user?.remaining_downloads ?? '-'}/${j.user?.allowed_downloads ?? '-'}`);
-  if (j.token) {
-    const out = await fetch('https://api.opensubtitles.com/api/v1/logout', { method: 'DELETE', headers: { ...H, Authorization: `Bearer ${j.token}` } });
-    console.log(`logout: HTTP ${out.status}`);
+  const raw = {
+    key: process.env.OPENSUBTITLES_API_KEY ?? '',
+    user: process.env.OPENSUBTITLES_USERNAME ?? '',
+    pass: process.env.OPENSUBTITLES_PASSWORD ?? '',
+  };
+  const ws = (s: string) => s !== s.trim();
+  console.log(`spaces/line breaks around: key ${ws(raw.key)} · username ${ws(raw.user)} · password ${ws(raw.pass)}`);
+  console.log(`username looks like an email: ${raw.user.includes('@')}`);
+  const key = raw.key.trim();
+  const H = { 'Api-Key': key, 'User-Agent': 'StreamHub v1.0', 'Content-Type': 'application/json', Accept: 'application/json' };
+  const k = await fetch('https://api.opensubtitles.com/api/v1/infos/formats', { headers: H });
+  console.log(`API key accepted (no login): HTTP ${k.status}`);
+  if (ws(raw.user) || ws(raw.pass) || ws(raw.key)) {
+    const r = await fetch('https://api.opensubtitles.com/api/v1/login', { method: 'POST', headers: H, body: JSON.stringify({ username: raw.user.trim(), password: raw.pass.trim() }) });
+    const j = (await r.json().catch(() => ({}))) as { token?: string; message?: string };
+    console.log(`login with spaces trimmed: HTTP ${r.status} · token ${!!j.token}`);
+    if (j.token) await fetch('https://api.opensubtitles.com/api/v1/logout', { method: 'DELETE', headers: { ...H, Authorization: `Bearer ${j.token}` } });
+  } else {
+    console.log('no stray spaces: login not retried');
   }
 }
 main();
