@@ -64,6 +64,8 @@ export async function validateStream(
   const format = opts.format ?? (/\.mpd(\?|$)/i.test(url) ? 'dash' : /\.(mp4|webm|ts)(\?|$)/i.test(url) ? 'progressive' : 'hls');
   let u = url;
   let cors: boolean | undefined;
+  // Set when the previous playlist said the next request is a media segment.
+  let segment: { encrypted: boolean } | undefined;
   for (let depth = 0; depth < 4; depth++) {
     let r;
     try {
@@ -77,6 +79,15 @@ export async function validateStream(
     if (r.status === 401 || r.status === 403 || r.status === 451) return { ok: false, reason: 'locked', detail: `HTTP ${r.status}` };
     if (r.status >= 400 || r.status === 0) return { ok: false, reason: 'http', detail: `HTTP ${r.status}` };
     const media = looksLikeMedia(r.bytes);
+    if (segment) {
+      // A segment is judged as a segment, never re-read as a playlist.
+      if (media) return { ok: true, kind: 'hls', detail: media, cors };
+      // AES-128 / SAMPLE-AES segments are scrambled until the player decrypts
+      // them (Pluto TV and others): real binary data of segment size counts.
+      if (segment.encrypted && !isHtml(r.bytes, r.type) && !/xml|json|text\//.test(r.type) && r.bytes.length >= 1024)
+        return { ok: true, kind: 'hls', detail: 'encrypted segment', cors };
+      return { ok: false, reason: isHtml(r.bytes, r.type) ? 'html' : 'not-media', detail: 'segment is not media', cors };
+    }
     if (media) return { ok: true, kind: format === 'progressive' || depth === 0 ? 'progressive' : 'hls', detail: media, cors };
     if (format === 'dash') {
       const t = td.decode(r.bytes);
@@ -93,6 +104,7 @@ export async function validateStream(
     const next = nextUri(text, r.finalUrl);
     if (!next) return { ok: false, reason: 'empty', detail: 'playlist has no entries' };
     if (!isSafeUrl(next.uri)) return { ok: false, reason: 'unsafe', detail: 'entry points to an address not allowed' };
+    if (next.kind === 'segment') segment = { encrypted: /#EXT-X-KEY:[^\n]*METHOD=(AES-128|SAMPLE-AES)/.test(text) };
     u = next.uri;
   }
   return { ok: false, reason: 'too-deep', detail: 'too many nested playlists' };

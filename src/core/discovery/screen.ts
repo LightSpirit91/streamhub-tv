@@ -19,7 +19,7 @@ import { isBannedStream } from '../catalog/normalize';
 
 export type Rejection =
   | 'repo-ppv' | 'repo-excluded' | 'repo-known-source' | 'unsafe' | 'banned' | 'host-not-trusted' | 'host-excluded'
-  | 'other-country' | 'ip-host' | 'pay-tv-channel' | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
+  | 'other-country' | 'unknown-country' | 'ip-host' | 'pay-tv-channel' | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
 
 /** PPV / pay-TV restream projects and pirate sports sites (names, descriptions, topics, hosts). */
 const PPV = /ppv|pay[ -]?per[ -]?view|streamed\.su|streamed[._-]?(su|pk)|crack ?streams?|meth ?streams?|buff ?streams?|sportsurge|totalsportek|daddy ?live|dlhd|thetvapp|tvpass|stream ?east|methstream|xtream|stalker|mac[ _-]?portal|m3u ?premium|premium ?iptv|vip ?iptv|cracked|warez|pirat/i;
@@ -75,6 +75,8 @@ export interface ScreenContext {
   trusted: Set<string>;
   /** Countries you watch (PROFILE_COUNTRIES). Links marked for another country are left out. */
   countries?: Set<string>;
+  /** Names of channels already in the lineup (normalised). A link with no country tag must match one. */
+  knownNames?: Set<string>;
   excludedHosts: string[];
   knownUrls: Set<string>;
 }
@@ -95,6 +97,7 @@ export function screenEntry(e: PlaylistEntry, ctx: ScreenContext): Rejection | u
   if (ctx.countries) {
     const cc = entryCountries(e);
     if (cc.length && !cc.some((c) => ctx.countries!.has(c))) return 'other-country';
+    if (!cc.length && ctx.knownNames && !ctx.knownNames.has(normName(e.name))) return 'unknown-country';
   }
   if (e.userAgent || e.referrer || e.attrs['http-referrer'] || e.attrs['http-user-agent']) return 'needs-faked-headers';
   if (ACCOUNT.test(url)) return 'account-link';
@@ -103,6 +106,10 @@ export function screenEntry(e: PlaylistEntry, ctx: ScreenContext): Rejection | u
   if (ctx.knownUrls.has(url)) return 'duplicate';
   return undefined;
 }
+
+/** "CNN (1080p) [Geo-blocked]" -> "cnn". */
+export const normName = (n: string) =>
+  n.toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\b(hd|fhd|uhd|4k|sd|tv)\b/g, ' ').replace(/[^\p{L}\p{N}]+/gu, '');
 
 /** Countries a playlist entry says it is for: tvg-country, or the tvg-id suffix ("CNN.us"). */
 export function entryCountries(e: PlaylistEntry): string[] {

@@ -146,3 +146,18 @@ describe('refresh settings', () => {
     expect(isDue(0, 24, 24 * h - 5 * 60_000)).toBe(true);
   });
 });
+
+describe('encrypted HLS (Pluto TV style)', () => {
+  const pl = '#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXT-X-KEY:METHOD=AES-128,URI="https://k.example.com/1.key"\n#EXTINF:5,\nhttps://seg.example.com/a.ts\n';
+  const scrambled = () => Uint8Array.from({ length: 4096 }, (_, i) => (i * 131 + 7) % 251);
+  it('accepts a scrambled segment when the playlist declares AES-128', async () => {
+    const get = net({ 'https://c.example.com/a.m3u8': { body: pl }, 'https://seg.example.com/a.ts': { type: 'video/mp2t', body: scrambled() } });
+    expect(await validateStream('https://c.example.com/a.m3u8', get, { live: true })).toMatchObject({ ok: true, detail: 'encrypted segment' });
+  });
+  it('still rejects an error page in place of an encrypted segment, and scrambled bytes without encryption', async () => {
+    const err = net({ 'https://c.example.com/a.m3u8': { body: pl }, 'https://seg.example.com/a.ts': { status: 200, type: 'application/xml', body: '<?xml version="1.0"?><Error>AccessDenied</Error>' } });
+    expect(await validateStream('https://c.example.com/a.m3u8', err)).toMatchObject({ ok: false });
+    const plain = net({ 'https://c.example.com/a.m3u8': { body: pl.replace(/#EXT-X-KEY[^\n]*\n/, '') }, 'https://seg.example.com/a.ts': { body: scrambled() } });
+    expect(await validateStream('https://c.example.com/a.m3u8', plain)).toMatchObject({ ok: false, reason: 'not-media' });
+  });
+});

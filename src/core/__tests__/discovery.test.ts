@@ -79,3 +79,12 @@ describe('discovery refuses restreams', () => {
     expect(screenEntry(entry('https://tvsen3.aynaott.com/x/index.m3u8', { name: 'Something' }), ctx())).toBe('repo-ppv');
   });
 });
+
+describe('discovery: links without a country tag', () => {
+  const c = () => ({ ...ctx(), countries: new Set(['US', 'CA']), knownNames: new Set(['buzzr', 'cbsnewsboston']) });
+  it('only adds them as extra links for channels already in the lineup', () => {
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: 'Buzzr (1080p)' }), c())).toBeUndefined();
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: 'Hindi Movies' }), c())).toBe('unknown-country');
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: 'New FAST Channel', country: 'US' }), c())).toBeUndefined();
+  });
+});
