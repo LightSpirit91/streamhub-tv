@@ -82,16 +82,23 @@ export async function processSource(
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 900_000);
   try {
-    let stream: NodeJS.ReadableStream;
+    let source: NodeJS.ReadableStream;
     if (url.startsWith('file:')) {
       // Guides collected tonight with iptv-org/epg (dist/epg-grab).
-      stream = createReadStream(url.slice(5));
+      source = createReadStream(url.slice(5));
     } else {
       const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'StreamHub-EPG/1.1' } });
       if (!res.ok || !res.body) return { error: `HTTP ${res.status}` };
-      stream = Readable.fromWeb(res.body as never);
+      source = Readable.fromWeb(res.body as never);
     }
-    if (url.endsWith('.gz')) stream = stream.pipe(createGunzip());
+    let stream: NodeJS.ReadableStream = source;
+    if (url.endsWith('.gz')) {
+      // A dropped connection must reach the reader below (and be caught), not crash the job:
+      // errors don't travel through pipe() on their own.
+      const gunzip = createGunzip();
+      source.on('error', (e: Error) => gunzip.destroy(e));
+      stream = source.pipe(gunzip);
+    }
     stream.setEncoding?.('utf8');
 
     // i.mjh.nz guides interleave channels and programmes; they are small, so read them whole.
