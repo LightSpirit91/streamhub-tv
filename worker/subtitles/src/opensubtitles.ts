@@ -1,0 +1,211 @@
+/**
+ * OpenSubtitles REST API client for the StreamHub subtitle backend.
+ * Runs only on the server (Cloudflare Worker). Credentials come from the
+ * Worker's encrypted secrets and never leave it: no logging of keys, user
+ * names, passwords or tokens, and none of them in any response.
+ *
+ * API rules followed (OpenSubtitles REST API v1):
+ * - Every request sends Api-Key and a named User-Agent ("StreamHub v1.0").
+ * - Log in once, reuse the token (~24 h), use the base_url the login returns;
+ *   log in again only when a call answers 401.
+ * - Query parameters lowercase, in alphabetical order, language codes sorted,
+ *   imdb ids without "tt" or leading zeros (other forms are redirected).
+ * - Respect the 429 rate limit and the daily download allowance (406 / remaining).
+ */
+
+export type Lang = 'en' | 'es' | 'ru' | 'he';
+export const LANGS: Lang[] = ['en', 'es', 'he', 'ru']; // alphabetical
+
+export interface Creds {
+  apiKey: string;
+  username: string;
+  password: string;
+}
+
+export interface SearchQuery {
+  imdbId: string; // tt0051744 or 51744
+  lang: Lang;
+  /** Series: the show's IMDb id is imdbId; season and episode pick the episode. */
+  season?: number;
+  episode?: number;
+}
+
+export interface SubResult {
+  fileId: number;
+  lang: Lang;
+  release: string;
+  downloads: number;
+  hearingImpaired: boolean;
+  fps?: number;
+  uploader?: string;
+}
+
+export type ApiError =
+  | { kind: 'auth' } // login refused: wrong or rotated credentials
+  | { kind: 'quota'; resetTime?: string } // today's free downloads used up
+  | { kind: 'busy' } // rate limited
+  | { kind: 'notfound' }
+  | { kind: 'upstream'; status: number };
+
+export class OsError extends Error {
+  constructor(public info: ApiError) {
+    super(info.kind);
+  }
+}
+
+export const UA = 'StreamHub v1.0';
+const DEFAULT_BASE = 'https://api.opensubtitles.com/api/v1';
+const TOKEN_TTL_MS = 23 * 3_600_000;
+
+/** "tt0051744" -> "51744" */
+export const imdbNum = (id: string) => String(Number(String(id).replace(/^tt/i, '')) || '');
+
+/** Search URL with parameters lowercase and in alphabetical order. */
+export function searchPath(q: SearchQuery): string {
+  const p: Record<string, string> = {
+    ai_translated: 'exclude',
+    languages: q.lang,
+    machine_translated: 'exclude',
+    order_by: 'download_count',
+  };
+  if (q.season != null && q.episode != null) {
+    p.episode_number = String(q.episode);
+    p.parent_imdb_id = imdbNum(q.imdbId);
+    p.season_number = String(q.season);
+  } else {
+    p.imdb_id = imdbNum(q.imdbId);
+  }
+  const qs = Object.keys(p)
+    .sort()
+    .map((k) => `${k}=${encodeURIComponent(p[k]).toLowerCase()}`)
+    .join('&');
+  return `/subtitles?${qs}`;
+}
+
+interface RawHit {
+  attributes: {
+    language?: string;
+    release?: string;
+    download_count?: number;
+    hearing_impaired?: boolean;
+    fps?: number;
+    ai_translated?: boolean;
+    machine_translated?: boolean;
+    uploader?: { name?: string };
+    files?: { file_id: number; file_name?: string }[];
+  };
+}
+
+/** Best results first: human-made, not hearing-impaired first, most downloaded. */
+export function toResults(data: RawHit[], lang: Lang, max = 8): SubResult[] {
+  return data
+    .filter((d) => d.attributes.files?.length && !d.attributes.ai_translated && !d.attributes.machine_translated)
+    .filter((d) => (d.attributes.language ?? '').toLowerCase().startsWith(lang))
+    .map((d) => ({
+      fileId: d.attributes.files![0].file_id,
+      lang,
+      release: (d.attributes.release || d.attributes.files![0].file_name || 'Subtitle').slice(0, 120),
+      downloads: d.attributes.download_count ?? 0,
+      hearingImpaired: !!d.attributes.hearing_impaired,
+      fps: d.attributes.fps || undefined,
+      uploader: d.attributes.uploader?.name,
+    }))
+    .sort((a, b) => Number(a.hearingImpaired) - Number(b.hearingImpaired) || b.downloads - a.downloads)
+    .slice(0, max);
+}
+
+type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** One client per Worker instance: holds the token in memory. */
+export class OpenSubtitles {
+  private token = '';
+  private tokenAt = 0;
+  private base = DEFAULT_BASE;
+  /** Last known download allowance (from login or the last download). */
+  quota: { remaining?: number; resetTime?: string } = {};
+
+  constructor(private creds: Creds, private fetcher: Fetch = fetch, private now = () => Date.now()) {}
+
+  private headers(auth: boolean): Record<string, string> {
+    return {
+      'Api-Key': this.creds.apiKey,
+      'User-Agent': UA,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(auth && this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+    };
+  }
+
+  /** After a refused login, wait before trying again: OpenSubtitles locks accounts after ~10 failures. */
+  private authFailedAt = -Infinity;
+  static AUTH_COOLDOWN_MS = 30 * 60_000;
+
+  private async login(): Promise<void> {
+    if (this.now() - this.authFailedAt < OpenSubtitles.AUTH_COOLDOWN_MS) throw new OsError({ kind: 'auth' });
+    const res = await this.fetcher(`${DEFAULT_BASE}/login`, {
+      method: 'POST',
+      headers: this.headers(false),
+      body: JSON.stringify({ username: this.creds.username, password: this.creds.password }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      this.authFailedAt = this.now();
+      throw new OsError({ kind: 'auth' });
+    }
+    if (res.status === 429) throw new OsError({ kind: 'busy' });
+    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status });
+    const j = (await res.json()) as { token?: string; base_url?: string; user?: { remaining_downloads?: number } };
+    if (!j.token) {
+      this.authFailedAt = this.now();
+      throw new OsError({ kind: 'auth' });
+    }
+    this.authFailedAt = -Infinity;
+    this.token = j.token;
+    this.tokenAt = this.now();
+    if (j.base_url) this.base = `https://${j.base_url.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}/api/v1`;
+    if (j.user?.remaining_downloads != null) this.quota.remaining = j.user.remaining_downloads;
+  }
+
+  private async ensureToken() {
+    if (!this.token || this.now() - this.tokenAt > TOKEN_TTL_MS) await this.login();
+  }
+
+  /** Authenticated call; on 401 the token is renewed once and the call repeated. */
+  private async call(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
+    await this.ensureToken();
+    const res = await this.fetcher(`${this.base}${path}`, { ...init, headers: this.headers(true) });
+    if (res.status === 401 && !retried) {
+      this.token = '';
+      return this.call(path, init, true);
+    }
+    if (res.status === 429) throw new OsError({ kind: 'busy' });
+    return res;
+  }
+
+  async search(q: SearchQuery): Promise<SubResult[]> {
+    if (!imdbNum(q.imdbId) || !LANGS.includes(q.lang)) throw new OsError({ kind: 'notfound' });
+    const res = await this.call(searchPath(q));
+    if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status });
+    const j = (await res.json()) as { data?: RawHit[] };
+    return toResults(j.data ?? [], q.lang);
+  }
+
+  /** Downloads one subtitle file (uses one of today's downloads) and returns its text. */
+  async download(fileId: number): Promise<{ text: string; remaining?: number; resetTime?: string }> {
+    if (this.quota.remaining != null && this.quota.remaining <= 0) throw new OsError({ kind: 'quota', resetTime: this.quota.resetTime });
+    const res = await this.call('/download', { method: 'POST', body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) });
+    const j = (await res.json().catch(() => ({}))) as { link?: string; remaining?: number; reset_time_utc?: string; reset_time?: string; message?: string };
+    const resetTime = j.reset_time_utc ?? j.reset_time;
+    if (res.status === 406 || (res.ok && !j.link && (j.remaining ?? 1) <= 0)) {
+      this.quota = { remaining: 0, resetTime };
+      throw new OsError({ kind: 'quota', resetTime });
+    }
+    if (res.status === 404) throw new OsError({ kind: 'notfound' });
+    if (!res.ok || !j.link) throw new OsError({ kind: 'upstream', status: res.status });
+    this.quota = { remaining: j.remaining, resetTime };
+    const file = await this.fetcher(j.link, { headers: { 'User-Agent': UA } });
+    if (!file.ok) throw new OsError({ kind: 'upstream', status: file.status });
+    const text = await file.text();
+    if (!/-->/.test(text)) throw new OsError({ kind: 'notfound' });
+    return { text, remaining: j.remaining, resetTime };
+  }
+}

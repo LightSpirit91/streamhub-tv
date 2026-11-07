@@ -70,4 +70,4 @@ async function live() {
   console.log(`logout: HTTP ${out.status}`);
 }
 
-docs().then(live).catch((e) => console.log(`probe error ${(e as Error).message}`));
+docs().catch((e) => console.log(`probe error ${(e as Error).message}`));
