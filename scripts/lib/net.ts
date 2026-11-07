@@ -12,6 +12,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 import net from 'node:net';
+import zlib from 'node:zlib';
 import { isPrivateIPv4, isPrivateIPv6, isSafeUrl } from '../../src/core/playback/safeUrl';
 import type { GetBytes } from '../../src/core/playback/validate';
 
@@ -54,6 +55,24 @@ export interface SafeResponse {
   headers: Record<string, string | string[] | undefined>;
 }
 
+/**
+ * Many servers compress playlists (gzip / deflate / br) even when not asked;
+ * players unpack them, so the checker must too. A cut-off body is unpacked as
+ * far as it goes.
+ */
+function decode(buf: Buffer, encoding: string | string[] | undefined, max: number): Uint8Array {
+  const enc = String(encoding ?? '').toLowerCase();
+  const opts = { finishFlush: zlib.constants.Z_SYNC_FLUSH, maxOutputLength: max * 8 };
+  try {
+    if (enc.includes('gzip') || (buf[0] === 0x1f && buf[1] === 0x8b)) return new Uint8Array(zlib.gunzipSync(buf, opts));
+    if (enc.includes('deflate')) return new Uint8Array(zlib.inflateSync(buf, opts));
+    if (enc.includes('br')) return new Uint8Array(zlib.brotliDecompressSync(buf, { maxOutputLength: max * 8 }));
+  } catch {
+    // not really compressed: use as is
+  }
+  return new Uint8Array(buf);
+}
+
 function once(url: string, headers: Record<string, string>, o: Required<Omit<SafeGetOptions, 'budget'>>): Promise<SafeResponse & { location?: string }> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -84,7 +103,12 @@ function once(url: string, headers: Record<string, string>, o: Required<Omit<Saf
         }
         const chunks: Buffer[] = [];
         let size = 0;
-        const finish = () => resolve({ status, type: String(res.headers['content-type'] ?? ''), bytes: new Uint8Array(Buffer.concat(chunks)), finalUrl: url, headers: res.headers });
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          resolve({ status, type: String(res.headers['content-type'] ?? ''), bytes: decode(Buffer.concat(chunks), res.headers['content-encoding'], o.maxBytes), finalUrl: url, headers: res.headers });
+        };
         res.on('data', (c: Buffer) => {
           chunks.push(c);
           size += c.length;
