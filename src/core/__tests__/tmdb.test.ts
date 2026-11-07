@@ -58,7 +58,7 @@ describe('free to stream', () => {
         ],
       },
     }, 'Hard Boiled');
-    expect(links.map((l) => l.name)).toEqual(['Tubi TV', 'Pluto TV']);
+    expect(links.map((l) => l.name)).toEqual(['Tubi TV', 'Pluto TV']); // no sign-up services only
     expect(links[0].url).toBe('https://tubitv.com/search/Hard%20Boiled');
     expect(links[1].url).toBe('https://www.themoviedb.org/movie/9/watch?locale=CA');
     expect(freeLinks({ watch: { providers: [{ name: 'Netflix', type: 'stream' }] } }, 'X')).toEqual([]);
@@ -72,7 +72,7 @@ describe('free to stream', () => {
 });
 
 describe('free services', () => {
-  it('drops paid ad tiers and YouTube, labels library-card services and lists them last', async () => {
+  it('offers only services that need no account: Tubi and Pluto TV', async () => {
     const { freeLinks } = await import('../meta/tmdb');
     const names = freeLinks({
       tmdbId: 1, tmdbType: 'movie',
@@ -81,6 +81,6 @@ describe('free services', () => {
         { name: 'Crave', type: 'ads' }, { name: 'YouTube', type: 'free' }, { name: 'CBC Gem', type: 'ads' }, { name: 'Tubi TV', type: 'ads' },
       ] },
     }, 'X').map((l) => l.name);
-    expect(names).toEqual(['CBC Gem', 'Tubi TV', 'Hoopla (library card)']);
+    expect(names).toEqual(['Tubi TV']);
   });
 });
