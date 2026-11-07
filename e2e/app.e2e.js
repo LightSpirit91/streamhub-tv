@@ -44,6 +44,16 @@ async function run(b, name, viewport) {
       if (!(await p.getByText('Channel offline').count())) throw new Error('preview did not come back');
     });
   });
+  await step('Live TV country picker', async () => {
+    const chip = p.locator('[aria-label^="Country Russia"]').first();
+    const label = await chip.getAttribute('aria-label');
+    const want = Number(label.replace(/\D/g, ''));
+    await chip.click(); await p.waitForTimeout(500);
+    const head = await p.getByText(/^[\d,]+ channels/).first().innerText();
+    const got = Number(head.split(' ')[0].replace(/,/g, ''));
+    if (got !== want) throw new Error(`picked Russia (${want}) but list shows ${got}`);
+    await p.locator('[aria-label="Country All countries"]').click(); await p.waitForTimeout(300);
+  });
   await step('Live TV filter chip', async () => { await p.getByText('Israel', { exact: true }).first().click(); await p.waitForTimeout(600); });
   await step('Movies page + details + close', async () => {
     await tab('Movies'); await p.waitForTimeout(1500);

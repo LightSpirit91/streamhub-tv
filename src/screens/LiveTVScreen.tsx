@@ -3,12 +3,18 @@ import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } fro
 import { Image } from 'expo-image';
 import { CalendarDays, Expand, Heart, Pause, Play, Volume2, VolumeX } from 'lucide-react-native';
 import { overlayOpen, useUi } from '../state/ui';
+import { COUNTRY } from '../core/catalog/enrich';
+import { readJSON, writeJSON } from '../services/storage';
+
+/** Countries shown first in the picker; the rest follow by number of channels. */
+const COUNTRY_ORDER = ['US', 'CA', 'UK', 'RU', 'IL', 'MX', 'AR', 'CO', 'CL', 'PE'];
+const countryName = (cc: string) => (cc === 'INT' ? 'International' : COUNTRY[cc] ?? cc);
 import type { Channel, HubId } from '../core/types';
 import { HUBS, HUB_BY_ID } from '../core/catalog/hubs';
 import { useStreamHub } from '../state/useStreamHub';
 import StreamVideo from '../player/MediaView';
 import { initials } from '../components/ChannelCard';
-import { Button, CountryTag, LiveBadge, QualityBadge, useFocusRing } from '../ui/primitives';
+import { Button, CountryTag, Flag, LiveBadge, QualityBadge, useFocusRing } from '../ui/primitives';
 import { colors, fonts, qualityLabel, radius, type } from '../ui/theme';
 import { useLayout } from '../ui/layout';
 import { ProgramCell, Schedule, useProgramme } from '../components/Guide';
@@ -38,6 +44,18 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
   useEffect(() => {
     if (initialHub) setHub(initialHub);
   }, [initialHub]);
+  // Country picker (remembered on this device).
+  const [country, setCountryState] = useState<string>(() => readJSON<string>('live:country', 'all'));
+  const setCountry = (cc: string) => {
+    setCountryState(cc);
+    writeJSON('live:country', cc);
+  };
+  const countries = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const c of channels) n.set(c.country ?? 'INT', (n.get(c.country ?? 'INT') ?? 0) + 1);
+    const rank = (cc: string) => (COUNTRY_ORDER.includes(cc) ? COUNTRY_ORDER.indexOf(cc) : 100);
+    return [...n.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || b[1] - a[1]);
+  }, [channels]);
 
   // Stable channel numbers across the whole lineup, in hub order.
   const numbers = useMemo(() => {
@@ -53,8 +71,9 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
     if (hub === 'all') l = [...channels];
     else if (hub === 'mylist') l = channels.filter((c) => favorites.includes(c.id));
     else l = channels.filter((c) => c.hubs.includes(hub));
+    if (country !== 'all') l = l.filter((c) => (c.country ?? 'INT') === country);
     return l.sort((a, b) => (numbers.get(a.id) ?? 0) - (numbers.get(b.id) ?? 0));
-  }, [hub, channels, favorites, numbers]);
+  }, [hub, country, channels, favorites, numbers]);
 
   const [sel, setSel] = useState(0);
   const [tuned, setTuned] = useState<Channel | undefined>(list[0]);
@@ -65,7 +84,7 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
     setSel(0);
     setTuned(list[0]);
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [hub]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hub, country]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const select = useCallback(
     (i: number, scroll: boolean) => {
@@ -174,6 +193,18 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
       >
         {filters.map((f) => (
           <FilterChip key={f.id} label={f.label} color={f.color} active={hub === f.id} onPress={() => setHub(f.id)} />
+        ))}
+      </ScrollView>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        contentContainerStyle={{ paddingHorizontal: L.gutter, gap: 8, paddingBottom: 8, alignItems: 'center' }}
+      >
+        <Text style={styles.countryLabel}>Country</Text>
+        <CountryChip label="All countries" active={country === 'all'} onPress={() => setCountry('all')} />
+        {countries.map(([cc, n]) => (
+          <CountryChip key={cc} cc={cc} label={`${countryName(cc)} ${n.toLocaleString()}`} active={country === cc} onPress={() => setCountry(cc)} />
         ))}
       </ScrollView>
 
@@ -337,6 +368,22 @@ function MiniBtn({ label, onPress, children }: { label: string; onPress(): void;
   );
 }
 
+function CountryChip({ cc, label, active, onPress }: { cc?: string; label: string; active: boolean; onPress(): void }) {
+  const f = useFocusRing();
+  return (
+    <Pressable
+      onPress={onPress}
+      {...f.handlers}
+      accessibilityRole="button"
+      accessibilityLabel={`Country ${label}`}
+      style={[styles.chip, styles.countryChip, active && { backgroundColor: 'rgba(244,184,96,0.16)', borderColor: colors.gold }, f.on && { borderColor: colors.focus }]}
+    >
+      {cc && cc !== 'INT' ? <Flag country={cc} size={12} /> : null}
+      <Text style={[styles.chipText, active && { color: colors.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function FilterChip({ label, color, active, onPress }: { label: string; color: string; active: boolean; onPress(): void }) {
   const f = useFocusRing();
   return (
@@ -399,6 +446,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, height: 34, justifyContent: 'center', borderRadius: 999, borderWidth: 1.5,
     borderColor: colors.line, backgroundColor: colors.bgRaised,
   },
+  countryChip: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 30 },
+  countryLabel: { color: colors.textFaint, fontFamily: fonts.bodySemi, fontSize: 12, marginRight: 2 },
   chipText: { color: colors.textDim, fontFamily: fonts.bodyBold, fontSize: 13 },
   empty: { color: colors.textDim, fontFamily: fonts.body, fontSize: 14, padding: 16 },
 });

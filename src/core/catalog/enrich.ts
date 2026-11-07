@@ -24,7 +24,7 @@ export interface DbLogo {
   url: string;
 }
 
-const COUNTRY: Record<string, string> = {
+export const COUNTRY: Record<string, string> = {
   US: 'USA', CA: 'Canada', RU: 'Russia', IL: 'Israel', MX: 'Mexico', AR: 'Argentina', CO: 'Colombia', CL: 'Chile',
   PE: 'Peru', VE: 'Venezuela', EC: 'Ecuador', UY: 'Uruguay', PY: 'Paraguay', BO: 'Bolivia', CR: 'Costa Rica',
   PA: 'Panama', GT: 'Guatemala', HN: 'Honduras', SV: 'El Salvador', NI: 'Nicaragua', DO: 'Dominican Republic',
