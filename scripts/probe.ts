@@ -1,28 +1,25 @@
 /**
- * One-off check of the StreamHub subtitle backend from GitHub's servers.
- * Calls /search like the app does (GitHub Pages origin). Uses no download
- * allowance. Prints only status codes, result counts and error labels.
+ * One login check against OpenSubtitles from GitHub with the corrected
+ * GitHub secrets. Prints only the HTTP status, whether a token came back,
+ * the allowance numbers, and OpenSubtitles' failed/remaining login counters.
+ * Never prints the key, username, password, token or the full reply.
  */
 async function main() {
-  const base = (process.env.SUBTITLES_API_URL ?? '').replace(/\/$/, '');
-  console.log(`backend address set: ${!!base}`);
-  if (!base) return;
-  const origin = { Origin: 'https://lightspirit91.github.io' };
-  for (const [label, path] of [
-    ['film, Spanish', '/search?imdb=tt0051744&lang=es'],
-    ['film, English', '/search?imdb=tt0051744&lang=en'],
-    ['episode, English', '/search?imdb=tt0052520&lang=en&season=1&episode=1'],
-    ['bad input', '/search?imdb=abc&lang=fr'],
-  ]) {
-    try {
-      const r = await fetch(`${base}${path}`, { headers: origin });
-      const j = (await r.json().catch(() => ({}))) as { results?: unknown[]; error?: string; code?: string; quota?: { remaining?: number } };
-      console.log(`${label}: HTTP ${r.status} · cors ${r.headers.get('access-control-allow-origin') === origin.Origin} · results ${j.results?.length ?? '-'} · error ${j.error ?? '-'} · code ${j.code ?? '-'} · downloads left ${j.quota?.remaining ?? '-'}`);
-    } catch (e) {
-      console.log(`${label}: request failed (${(e as Error).name})`);
-    }
+  const KEY = process.env.OPENSUBTITLES_API_KEY;
+  const USER = process.env.OPENSUBTITLES_USERNAME;
+  const PASS = process.env.OPENSUBTITLES_PASSWORD;
+  console.log(`secrets present: key ${!!KEY}, username ${!!USER}, password ${!!PASS}`);
+  if (!KEY || !USER || !PASS) return;
+  const H = { 'Api-Key': KEY, 'User-Agent': 'StreamHub v1.0', 'Content-Type': 'application/json', Accept: 'application/json' };
+  const r = await fetch('https://api.opensubtitles.com/api/v1/login', { method: 'POST', headers: H, body: JSON.stringify({ username: USER, password: PASS }) });
+  const type = r.headers.get('content-type') ?? '';
+  const j = (await r.json().catch(() => ({}))) as { token?: string; message?: string; user?: { allowed_downloads?: number; remaining_downloads?: number } };
+  const counters = /failed:\s*\d+\s*remaining:\s*\d+/i.exec(j.message ?? '')?.[0] ?? '-';
+  const kind = /invalid username\/password/i.test(j.message ?? '') ? 'wrong username or password' : /api.?key/i.test(j.message ?? '') ? 'API key problem' : /lock|block/i.test(j.message ?? '') ? 'account locked' : '-';
+  console.log(`login: HTTP ${r.status} · json ${type.includes('json')} · token ${!!j.token} · reason ${kind} · counters ${counters} · downloads ${j.user?.remaining_downloads ?? '-'}/${j.user?.allowed_downloads ?? '-'}`);
+  if (j.token) {
+    const out = await fetch('https://api.opensubtitles.com/api/v1/logout', { method: 'DELETE', headers: { ...H, Authorization: `Bearer ${j.token}` } });
+    console.log(`logout: HTTP ${out.status}`);
   }
-  const other = await fetch(`${base}/search?imdb=tt0051744&lang=es`, { headers: { Origin: 'https://example.com' } });
-  console.log(`other website: HTTP ${other.status} (403 expected)`);
 }
 main();

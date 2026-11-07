@@ -33,7 +33,10 @@ export function errorBody(e: unknown): [Record<string, unknown>, number, string]
     if (i.kind === 'quota') return [{ error: 'quota', resetTime: i.resetTime }, 429, 'quota'];
     if (i.kind === 'busy') return [{ error: 'busy' }, 503, 'busy'];
     if (i.kind === 'notfound') return [{ error: 'notfound' }, 404, 'notfound'];
-    if (i.kind === 'auth') return [{ error: 'unavailable', code: 'auth' }, 503, 'auth'];
+    if (i.kind === 'auth') {
+      const code = i.blocked ? `login-blocked-${i.status}` : i.status ? `auth-${i.status}` : 'auth-cooldown';
+      return [{ error: 'unavailable', code }, 503, code];
+    }
     const code = `${i.stage ?? 'upstream'}-${i.status}`;
     return [{ error: 'unavailable', code }, 502, code];
   }

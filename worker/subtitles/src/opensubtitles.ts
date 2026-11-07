@@ -41,7 +41,7 @@ export interface SubResult {
 }
 
 export type ApiError =
-  | { kind: 'auth' } // login refused: wrong or rotated credentials
+  | { kind: 'auth'; status?: number; blocked?: boolean } // login refused (401 wrong credentials; 403 + HTML page = blocked by a firewall)
   | { kind: 'quota'; resetTime?: string } // today's free downloads used up
   | { kind: 'busy' } // rate limited
   | { kind: 'notfound' }
@@ -172,7 +172,9 @@ export class OpenSubtitles {
     }, 'login-network');
     if (res.status === 401 || res.status === 403) {
       this.authFailedAt = this.now();
-      throw new OsError({ kind: 'auth' });
+      // An HTML page instead of the API's JSON means a firewall stopped the request, not the account.
+      const blocked = !(res.headers.get('content-type') ?? '').includes('json');
+      throw new OsError({ kind: 'auth', status: res.status, blocked });
     }
     if (res.status === 429) throw new OsError({ kind: 'busy' });
     if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'login-network' });
