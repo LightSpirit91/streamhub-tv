@@ -42,13 +42,14 @@ async function main() {
   // What do "not video" answers actually look like?
   const show = (b: Uint8Array) => JSON.stringify(new TextDecoder('latin1').decode(b.subarray(0, 120)));
   const hex = (b: Uint8Array) => Buffer.from(b.subarray(0, 16)).toString('hex');
-  for (const u of ['http://stream.mcquack.net/48/index.m3u8', 'https://cdn.ntv.ru/ntv0/playlist.m3u8', 'https://cdn.ntv.ru/ntv1/playlist.m3u8']) {
+  for (const u of ['https://jmp2.uk/plu-66ed3eb27358ce000830df49.m3u8', 'https://jmp2.uk/plu-545943f1c9f133a519bbac92.m3u8']) {
     console.log(`\n== ${u}`);
     try {
       let url = u;
-      for (let d = 0; d < 3; d++) {
-        const r = await safeGet(url, { Origin: 'https://lightspirit91.github.io' }, { maxBytes: d === 2 ? 4096 : 64_000 });
-        console.log(`depth ${d} status ${r.status} type ${r.type} enc ${r.headers['content-encoding'] ?? '-'} len ${r.bytes.length} hex ${hex(r.bytes)} text ${show(r.bytes)}`);
+      for (let d = 0; d < 4; d++) {
+        const r = await safeGet(url, { Origin: 'https://lightspirit91.github.io' }, { maxBytes: 64_000 });
+        console.log(`depth ${d} url ${r.finalUrl.slice(0, 140)}\n  status ${r.status} type ${r.type} enc ${r.headers['content-encoding'] ?? '-'} len ${r.bytes.length} hex ${hex(r.bytes)} text ${show(r.bytes)}`);
+        if (d > 0) console.log('  lines:', JSON.stringify(new TextDecoder().decode(r.bytes).split('\\n').slice(0, 14)));
         const t = new TextDecoder().decode(r.bytes);
         if (/#EXT-X-KEY/.test(t)) console.log('  has EXT-X-KEY:', /#EXT-X-KEY:[^\n]*/.exec(t)?.[0].slice(0, 80));
         const n = nextUri(t, r.finalUrl);

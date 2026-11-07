@@ -19,11 +19,19 @@ import { isBannedStream } from '../catalog/normalize';
 
 export type Rejection =
   | 'repo-ppv' | 'repo-excluded' | 'repo-known-source' | 'unsafe' | 'banned' | 'host-not-trusted' | 'host-excluded'
-  | 'other-country' | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
+  | 'other-country' | 'ip-host' | 'pay-tv-channel' | 'needs-faked-headers' | 'account-link' | 'expiring-link' | 'ppv-name' | 'duplicate' | 'not-a-stream' | `check-${string}`;
 
 /** PPV / pay-TV restream projects and pirate sports sites (names, descriptions, topics, hosts). */
 const PPV = /ppv|pay[ -]?per[ -]?view|streamed\.su|streamed[._-]?(su|pk)|crack ?streams?|meth ?streams?|buff ?streams?|sportsurge|totalsportek|daddy ?live|dlhd|thetvapp|tvpass|stream ?east|methstream|xtream|stalker|mac[ _-]?portal|m3u ?premium|premium ?iptv|vip ?iptv|cracked|warez|pirat/i;
-const PPV_HOSTS = /(^|\.)(ppv\.(to|st|land|wtf)|streamed\.(su|pk)|crackstreams?\.[a-z]+|methstreams?\.[a-z]+|daddylive[a-z]*\.[a-z]+|thetvapp\.[a-z]+|tvpass\.[a-z]+|streameast[a-z]*\.[a-z]+|sportsurge\.[a-z]+|totalsportek[a-z0-9]*\.[a-z]+|dlhd\.[a-z]+)$/i;
+const PPV_HOSTS = /(^|\.)(aynaott\.com|ppv\.(to|st|land|wtf)|streamed\.(su|pk)|crackstreams?\.[a-z]+|methstreams?\.[a-z]+|daddylive[a-z]*\.[a-z]+|thetvapp\.[a-z]+|tvpass\.[a-z]+|streameast[a-z]*\.[a-z]+|sportsurge\.[a-z]+|totalsportek[a-z0-9]*\.[a-z]+|dlhd\.[a-z]+)$/i;
+/**
+ * Paid cable / premium / sports networks: never free, so a link to one found
+ * in a random repo is a restream. News and weather feeds the networks publish
+ * for free (CBS News, ABC News Live, NBC News NOW, Fox Weather) are fine.
+ */
+const PAY_TV = /\b(HBO|Cinemax|Showtime|Starz|MGM ?\+|Epix|Paramount Network|AMC|FXX?|FXM|HGTV|Comedy Central|VH1|MTV|Nat ?Geo|National Geographic|Science Channel|History( Channel)?|A&E|Lifetime|TLC|Discovery Channel|Food Network|Travel Channel|Disney (Channel|Junior|XD)|Nickelodeon|Nick Jr|Cartoon Network|ESPN\w*|FS[12]|Fox Sports|NFL Network|NFL RedZone|NBA TV|NHL Network|MLB Network|ACC (Digital )?Network|SEC Network|Big Ten Network|Tennis Channel( \d)?|Golf Channel|NBC Sports \w+|The CW|CW|TNT|TBS|truTV|USA Network|Bravo|Syfy|Hallmark( Movies)?|INSP|BBC America|Sky Sports|Sky Cinema|BT Sport|TNT Sports|DAZN|beIN|TSN\d?|Sportsnet|Crave|Super Channel|Willow|Fox|ABC|CBS|NBC|Univision|UniM[aá]s|Telemundo|Bally Sports|Spectrum SportsNet|YES Network|MSG|NESN)\b/i;
+const FREE_FEED = /\b(news|weather|noticias)\b/i;
+
 /** Repositories StreamHub already reads directly. */
 const KNOWN = /^(iptv-org\/|free-tv\/iptv$|famelack\/)/i;
 /** Shared hosting where anyone can publish: only an exact host match counts as trusted. */
@@ -81,6 +89,8 @@ export function screenEntry(e: PlaylistEntry, ctx: ScreenContext): Rejection | u
   if (isBannedStream({ url, source: 'discovered' })) return 'banned';
   const host = hostOf(url);
   if (PPV_HOSTS.test(host) || PPV.test(e.name)) return PPV_HOSTS.test(host) ? 'repo-ppv' : 'ppv-name';
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(':')) return 'ip-host';
+  if (PAY_TV.test(e.name) && !FREE_FEED.test(e.name)) return 'pay-tv-channel';
   if (ctx.excludedHosts.some((h) => host === h || host.endsWith(`.${h}`))) return 'host-excluded';
   if (ctx.countries) {
     const cc = entryCountries(e);

@@ -68,3 +68,14 @@ describe('discovery country rule', () => {
     expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8'), c())).toBeUndefined();
   });
 });
+
+describe('discovery refuses restreams', () => {
+  it('leaves out bare-IP servers, pay-TV channel names and restream services', () => {
+    expect(screenEntry(entry('http://23.237.104.106:8080/cw/index.m3u8', { name: 'CW' }), ctx())).toBe('ip-host');
+    for (const n of ['HBO Hits', 'FX', 'AMC', 'NFL Network', 'Disney Channel', 'ACC Network', 'Tennis Channel 2', 'NBC Sports Philadelphia', 'BBC America', 'Univision Network', 'Fox'])
+      expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: n }), ctx()), n).toBe('pay-tv-channel');
+    for (const n of ['CBS News Boston', 'ABC News Live', 'Fox Weather', 'NBC News NOW', 'Buzzr', 'Circle Country'])
+      expect(screenEntry(entry('https://amg1.amagi.tv/b.m3u8', { name: n }), ctx()), n).toBeUndefined();
+    expect(screenEntry(entry('https://tvsen3.aynaott.com/x/index.m3u8', { name: 'Something' }), ctx())).toBe('repo-ppv');
+  });
+});
