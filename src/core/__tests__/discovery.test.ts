@@ -88,3 +88,11 @@ describe('discovery: links without a country tag', () => {
     expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: 'New FAST Channel', country: 'US' }), c())).toBeUndefined();
   });
 });
+
+describe('discovery: flag emoji as country', () => {
+  it('reads the flag in the channel name', () => {
+    const c = { ...ctx(), countries: new Set(['US']), knownNames: new Set(['southpark']) };
+    expect(screenEntry(entry('https://amg1.amagi.tv/a.m3u8', { name: '☆ South Park (Coleção Kyle) 🇧🇷' }), c)).toBe('other-country');
+    expect(screenEntry(entry('https://amg1.amagi.tv/b.m3u8', { name: '☆ Tastemade Travel 🇺🇸' }), c)).toBeUndefined();
+  });
+});

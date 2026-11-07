@@ -116,6 +116,8 @@ export function entryCountries(e: PlaylistEntry): string[] {
   const out = (e.country ?? '').split(/[;,\s]+/).map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2,3}$/.test(c));
   const suffix = /\.([a-z]{2})(@[\w-]+)?$/i.exec(e.tvgId ?? '')?.[1];
   if (!out.length && suffix) out.push(suffix.toUpperCase());
+  // Flag emoji in the name ("South Park 🇧🇷"): two regional-indicator letters.
+  if (!out.length) for (const m of e.name.matchAll(/([\u{1F1E6}-\u{1F1FF}])([\u{1F1E6}-\u{1F1FF}])/gu)) out.push(String.fromCharCode(m[1].codePointAt(0)! - 0x1f1e6 + 65, m[2].codePointAt(0)! - 0x1f1e6 + 65));
   return out.map((c) => (c === 'GB' ? 'UK' : c));
 }
 
