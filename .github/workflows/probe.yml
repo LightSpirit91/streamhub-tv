@@ -20,4 +20,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx tsx scripts/probe.ts
         env:
-          SUBTITLES_API_URL: ${{ vars.SUBTITLES_API_URL }}
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
