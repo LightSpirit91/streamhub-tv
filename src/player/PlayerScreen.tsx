@@ -26,10 +26,7 @@ import { ProgressLine, progressOf, useProgramme } from '../components/Guide';
 import { clock, useNow } from '../hooks/useNow';
 import type { Fit } from './StreamVideo.types';
 import { SUB_LANGS, type StreamTrack } from '../core/subtitles';
-import { OpenSubtitlesPanel, SubtitleMenu, SubtitleOverlay, subOptions, useSubtitleFile, type OsPanel } from './Subtitles';
-import { parseSubtitles, type Cue, type SubLang } from '../core/subtitles';
-import { downloadSubtitle, searchSubtitles, subtitleErrorText, subtitleSearchEnabled, type SubtitleTarget } from '../core/subtitleService';
-import { fileBlobStore, readJSON, writeJSON } from '../services/storage';
+import { SubtitleMenu, SubtitleOverlay, subOptions, useSubtitleFile } from './Subtitles';
 
 const FITS: { fit: Fit; label: string }[] = [
   { fit: 'contain', label: 'Fit' },
@@ -122,77 +119,11 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
   const short = L.height < 500;
   useEffect(() => setInTracks([]), [stream?.url, attempt]);
   const subFiles = item.kind === 'movie' ? item.movie.subs : item.kind === 'episode' ? item.show.episodes[item.index]?.subs : undefined;
-  // OpenSubtitles (through the StreamHub subtitle backend): movies and episodes with an IMDb id.
-  const osTarget: SubtitleTarget | undefined = !subtitleSearchEnabled()
-    ? undefined
-    : item.kind === 'movie' && item.movie.imdbId
-      ? { imdbId: item.movie.imdbId }
-      : item.kind === 'episode' && item.show.imdbId && item.show.episodes[item.index]?.season != null && item.show.episodes[item.index]?.episode != null
-        ? { imdbId: item.show.imdbId, season: item.show.episodes[item.index].season, episode: item.show.episodes[item.index].episode }
-        : undefined;
-  const [osPanel, setOsPanel] = useState<OsPanel>({ state: 'idle' });
-  const [osPick, setOsPick] = useState<{ lang: SubLang; fileId: number; cues: Cue[] } | undefined>(undefined);
-  const subOpts = useMemo(
-    () => subOptions(inTracks, subFiles).map((o) => (osPick?.lang === o.code ? { ...o, os: true } : o)),
-    [inTracks, subFiles, osPick],
-  );
+  const subOpts = useMemo(() => subOptions(inTracks, subFiles), [inTracks, subFiles]);
   const activeSub = subLang === 'off' ? undefined : subOpts.find((o) => o.code === subLang);
   const textTrack = activeSub?.track?.id ?? null;
-  const fileCues = useSubtitleFile(!activeSub?.track ? activeSub?.file?.url : undefined);
-  const needsOs = !!osTarget && !!activeSub && !activeSub.track && !activeSub.file;
-  const sideCues = fileCues ?? (needsOs && osPick?.lang === subLang ? osPick.cues : undefined);
-  const subOn = !!(activeSub?.track || activeSub?.file || (needsOs && osPick?.lang === subLang));
-
-  // A subtitle chosen before for this title and language opens from the device (no download used).
-  useEffect(() => {
-    setOsPanel({ state: 'idle' });
-    setOsPick(undefined);
-    if (!needsOs || subLang === 'off') return;
-    const fileId = readJSON<Record<string, number>>(`os:pick:${id}`, {})[subLang];
-    if (!fileId) return;
-    let alive = true;
-    fileBlobStore
-      .read(`os-${fileId}.srt`)
-      .then((t) => {
-        if (alive && t) setOsPick({ lang: subLang as SubLang, fileId, cues: parseSubtitles(t) });
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [id, subLang, needsOs]);
-
-  const osLangLabel = SUB_LANGS.find((l) => l.code === subLang)?.label ?? '';
-  const osSearch = useCallback(async () => {
-    if (!osTarget || subLang === 'off') return;
-    const lang = subLang as SubLang;
-    setOsPanel({ state: 'loading', lang });
-    try {
-      setOsPanel({ state: 'list', lang, items: await searchSubtitles(osTarget, lang) });
-    } catch (e) {
-      setOsPanel({ state: 'error', lang, message: subtitleErrorText(e, osLangLabel) });
-    }
-  }, [osTarget?.imdbId, osTarget?.season, osTarget?.episode, subLang, osLangLabel]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const osChoose = useCallback(
-    async (fileId: number) => {
-      if (subLang === 'off') return;
-      const lang = subLang as SubLang;
-      try {
-        let text = await fileBlobStore.read(`os-${fileId}.srt`).catch(() => null);
-        if (!text) {
-          text = (await downloadSubtitle(fileId)).text;
-          await fileBlobStore.write(`os-${fileId}.srt`, text).catch(() => {});
-        }
-        writeJSON(`os:pick:${id}`, { ...readJSON<Record<string, number>>(`os:pick:${id}`, {}), [lang]: fileId });
-        setOsPick({ lang, fileId, cues: parseSubtitles(text) });
-        setSubMenu(false);
-      } catch (e) {
-        setOsPanel({ state: 'error', lang, message: subtitleErrorText(e, osLangLabel) });
-      }
-    },
-    [id, subLang, osLangLabel],
-  );
+  const sideCues = useSubtitleFile(!activeSub?.track ? activeSub?.file?.url : undefined);
+  const subOn = !!(activeSub?.track || activeSub?.file);
   const guide = useProgramme(id, nowSec);
 
   // Chromecast: while a TV is connected, nothing plays here and this screen
@@ -622,15 +553,9 @@ export function PlayerScreen({ item, onChange, onClose }: Props) {
             options={subOpts}
             onPick={(c) => {
               setSubLang(c);
-              // Stay open when the new language can be searched on OpenSubtitles.
-              const o = subOpts.find((x) => x.code === c);
-              if (c === 'off' || !osTarget || o?.track || o?.file) setSubMenu(false);
+              setSubMenu(false);
             }}
-          >
-            {needsOs && subLang !== 'off' ? (
-              <OpenSubtitlesPanel panel={osPanel} lang={subLang as SubLang} chosen={osPick?.fileId} onSearch={osSearch} onChoose={osChoose} />
-            ) : null}
-          </SubtitleMenu>
+          />
         </>
       ) : null}
     </View>

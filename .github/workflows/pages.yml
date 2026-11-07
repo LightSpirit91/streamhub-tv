@@ -28,8 +28,6 @@ jobs:
       - run: npx expo export --platform web --output-dir web-dist
         env:
           EXPO_PUBLIC_APP_VERSION: 1.${{ github.run_number }}
-          # Public address of the subtitle backend (a URL, not a secret). Empty = OpenSubtitles search hidden.
-          EXPO_PUBLIC_SUBTITLES_API: ${{ vars.SUBTITLES_API_URL }}
       - run: cp web-dist/index.html web-dist/404.html
       - uses: actions/configure-pages@v5
         with:
