@@ -56,12 +56,6 @@ jobs:
         continue-on-error: true
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      - run: npx tsx scripts/subtitle-doctor.ts --out dist --previous prev
-        continue-on-error: true
-        env:
-          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
-          OPENSUBTITLES_USERNAME: ${{ secrets.OPENSUBTITLES_USERNAME }}
-          OPENSUBTITLES_PASSWORD: ${{ secrets.OPENSUBTITLES_PASSWORD }}
       - run: npx tsx scripts/epg-doctor.ts --catalog dist/catalog.json --out dist
         continue-on-error: true
       - name: Publish to catalog branch
@@ -75,4 +69,4 @@ jobs:
           git commit -qm "Catalog $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" catalog
       - name: Job summary
-        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/shows-report.md dist/tmdb-report.md dist/fresh-report.md dist/subs-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+        run: cat dist/report.md dist/thumbs-report.md dist/movies-report.md dist/shows-report.md dist/tmdb-report.md dist/fresh-report.md dist/epg-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
