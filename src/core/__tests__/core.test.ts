@@ -424,3 +424,38 @@ describe('iptv-org blocklist and closed channels', () => {
     expect([...r.closed]).toEqual(['old.us']);
   });
 });
+
+describe('sports events from the TV guide', () => {
+  it('finds matches and fights, skips replays and talk, merges the same event across channels', async () => {
+    const { sportsEvents, isSportEvent } = await import('../epg/sports');
+    const ch = (id: string, hubs: string[]) => ({ id, name: id, categories: [], hubs, streams: [], popularity: 0, bestHeight: 0, search: '' }) as never;
+    const now = 1_800_000_000;
+    const epg = {
+      tsn: [[now - 600, now + 3000, 'Maple Leafs vs. Canadiens', 'Live from Toronto', 'Sports'], [now + 3600, now + 7200, 'NHL Highlights', '', 'Sports']],
+      sn: [[now - 600, now + 3000, 'Maple Leafs vs. Canadiens', '', 'Sports'], [now + 7200, now + 9000, 'UFC 320: Main Card', '', 'Sports']],
+      match: [[now + 1800, now + 5400, 'Футбол. РПЛ. Спартак - Зенит', 'Прямая трансляция', 'Спорт']],
+      news: [[now, now + 1800, 'Raptors vs. Celtics', '', 'News']],
+    } as Record<string, [number, number, string, string?, string?][]>;
+    const channels = [ch('tsn', ['sports']), ch('sn', ['sports']), ch('match', ['sports', 'russian']), ch('news', ['news'])];
+    const ev = sportsEvents(channels, epg, now);
+    expect(ev.map((e) => e.title)).toEqual(['Maple Leafs vs. Canadiens', 'Футбол. РПЛ. Спартак - Зенит', 'UFC 320: Main Card']);
+    expect(ev[0].channelIds).toEqual(['tsn', 'sn']);
+    expect(ev[0].liveBroadcast).toBe(true);
+    expect(ev[1].liveBroadcast).toBe(true);
+    expect(isSportEvent([now, now + 1, 'NHL Highlights', '', 'Sports'], channels[0])).toBe(false);
+  });
+});
+
+describe('switchable channel sources', () => {
+  it('hides links of a switched-off source and keeps channels that have another source', async () => {
+    const { withoutGroups, groupCounts, groupOf } = await import('../catalog/sourceGroups');
+    const st = (source: string) => ({ url: `https://x/${source}.m3u8`, height: 720, geoBlocked: false, notAlwaysOn: false, trust: 'public' as const, format: 'hls' as const, source, score: 50 });
+    const a = { id: 'a', name: 'A', categories: [], hubs: [], popularity: 0, bestHeight: 0, search: '', streams: [st('iptv-org:country:us'), st('free-tv')] };
+    const b = { ...a, id: 'b', streams: [st('famelack:ru')] };
+    expect(groupOf('iptv-org:raw:us_pluto')).toBe('iptv-org');
+    expect(groupCounts([a, b])).toEqual({ 'iptv-org': 1, 'free-tv': 1, famelack: 1 });
+    const r = withoutGroups([a, b], ['iptv-org', 'famelack']);
+    expect(r.map((c) => c.id)).toEqual(['a']);
+    expect(r[0].streams.map((s) => s.source)).toEqual(['free-tv']);
+  });
+});

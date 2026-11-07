@@ -29,6 +29,7 @@ import { NowOnTvBar } from './src/components/CastControls';
 import { APP_VERSION } from './src/version';
 import { ReminderBanner } from './src/components/ReminderBanner';
 import { WeekGuide } from './src/components/WeekGuide';
+import { SourcesSheet } from './src/components/SourcesSheet';
 import { useUi } from './src/state/ui';
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
   const [upcomingDetail, setUpcomingDetail] = useState<UpcomingMovie | null>(null);
   const schedule = useUi((s) => s.schedule);
   const closeSchedule = useUi((s) => s.closeSchedule);
+  const sourcesOpen = useUi((s) => s.sources);
   const allChannels = useStreamHub((s) => s.channels);
   // Chromecast: remember what's on the TV so the bar can reopen its remote.
   const castDevice = useCast().device;
@@ -168,6 +170,7 @@ export default function App() {
         />
       )}
       {playing && <PlayerScreen item={playing} onChange={setPlaying} onClose={() => setPlaying(null)} />}
+      {sourcesOpen && <SourcesSheet onClose={() => useUi.getState().setSources(false)} />}
       {schedule && (
         <WeekGuide
           channel={schedule}

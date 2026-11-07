@@ -7,13 +7,18 @@ interface UiState {
   schedule: Channel | null;
   openSchedule(c: Channel): void;
   closeSchedule(): void;
+  /** Channel sources panel. */
+  sources: boolean;
+  setSources(open: boolean): void;
 }
 
 export const useUi = create<UiState>((set) => ({
   schedule: null,
   openSchedule: (c) => set({ schedule: c }),
   closeSchedule: () => set({ schedule: null }),
+  sources: false,
+  setSources: (open) => set({ sources: open }),
 }));
 
 /** True while an overlay owns the keyboard / remote (screens underneath ignore keys). */
-export const overlayOpen = () => !!useUi.getState().schedule;
+export const overlayOpen = () => !!useUi.getState().schedule || useUi.getState().sources;

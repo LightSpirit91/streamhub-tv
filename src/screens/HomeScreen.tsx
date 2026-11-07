@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { SportsRow } from '../components/SportsRow';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -146,6 +147,7 @@ export function HomeScreen({ onPlay, onMovie, onSeeAll, onMovies, onShow }: Prop
 
       <Row title="Continue Watching" data={recentRow} keyOf={(c) => c.id} gutter={L.gutter} render={card(recentRow, colors.gold)} />
       <Row title="My List" data={favRow} keyOf={(c) => c.id} gutter={L.gutter} render={card(favRow, colors.gold)} />
+      <SportsRow width={L.cardWidth} gutter={L.gutter} onPlay={onPlay} />
       <Row title="Just Added: Channels" subtitle={newChannels.length ? `${newChannels.length} this week` : undefined} accent={colors.ok} data={newChannels} keyOf={(c) => c.id} gutter={L.gutter} render={card(newChannels, colors.ok)} />
       <Row
         title="Just Added: Movies & Series"

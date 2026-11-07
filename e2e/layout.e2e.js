@@ -36,7 +36,16 @@ async function overlaps(p, edges = true) {
         const top = Math.max(g.top, r.top), bottom = Math.min(g.bottom, r.bottom);
         box = { left, top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
       }
-      return { el, x: box.left, y: box.top, w: box.width, h: box.height, name: el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30) };
+      // Clip to every scrolling / clipping ancestor: content scrolled out of view isn't visible.
+      let { left, top } = box;
+      let right = box.left + box.width, bottom = box.top + box.height;
+      for (let a = el.parentElement; a; a = a.parentElement) {
+        const st = getComputedStyle(a);
+        if (st.overflowX === 'visible' && st.overflowY === 'visible') continue;
+        const c = a.getBoundingClientRect();
+        left = Math.max(left, c.left); top = Math.max(top, c.top); right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom);
+      }
+      return { el, x: left, y: top, w: Math.max(0, right - left), h: Math.max(0, bottom - top), name: el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30) };
     });
     const bad = [];
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {

@@ -54,6 +54,22 @@ async function run(b, name, viewport) {
     if (got !== want) throw new Error(`picked Russia (${want}) but list shows ${got}`);
     await p.locator('[aria-label="Country All countries"]').click(); await p.waitForTimeout(300);
   });
+  await step('Live TV sources panel: switch a source off and on', async () => {
+    const count = async () => Number((await p.getByText(/^[\d,]+ channels/).first().innerText()).split(' ')[0].replace(/,/g, ''));
+    const before = await count();
+    await p.click('[aria-label="Channel sources"]');
+    await p.locator('[aria-label="Source iptv-org on"]').click(); await p.waitForTimeout(500);
+    await p.locator('[aria-label="Source iptv-org off"]').waitFor({ timeout: 3000 });
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    const off = await count();
+    if (!(off < before)) throw new Error(`count did not drop (${before} -> ${off})`);
+    await p.click('[aria-label="Channel sources"]');
+    await p.locator('[aria-label="Source iptv-org off"]').click(); await p.waitForTimeout(500);
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    // The preview marks dead links while the test runs, so allow a small drift.
+    const back = await count();
+    if (Math.abs(back - before) > Math.max(20, before * 0.02)) throw new Error(`count did not come back (${before} -> ${back})`);
+  });
   await step('Live TV filter chip', async () => { await p.getByText('Israel', { exact: true }).first().click(); await p.waitForTimeout(600); });
   await step('Movies page + details + close', async () => {
     await tab('Movies'); await p.waitForTimeout(1500);

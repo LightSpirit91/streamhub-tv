@@ -201,6 +201,9 @@ export function LiveTVScreen({ initialHub, onFullscreen, suspended }: Props) {
         style={{ flexGrow: 0, flexShrink: 0 }}
         contentContainerStyle={{ paddingHorizontal: L.gutter, gap: 8, paddingBottom: 8, alignItems: 'center' }}
       >
+        <Pressable onPress={() => useUi.getState().setSources(true)} accessibilityRole="button" accessibilityLabel="Channel sources" style={[styles.chip, styles.countryChip]}>
+          <Text style={styles.chipText}>Sources</Text>
+        </Pressable>
         <Text style={styles.countryLabel}>Country</Text>
         <CountryChip label="All countries" active={country === 'all'} onPress={() => setCountry('all')} />
         {countries.map(([cc, n]) => (

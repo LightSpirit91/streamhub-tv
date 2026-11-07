@@ -4,6 +4,7 @@ import type { Movie, MovieCatalog } from '../core/movies/types';
 import { getCatalog, readCachedCatalog } from '../core/catalog/cache';
 import { loadCatalog, fetchText } from '../core/catalog/loader';
 import { applyHealth, withoutBanned } from '../core/catalog/buildCatalog';
+import { withoutGroups } from '../core/catalog/sourceGroups';
 import { channelsForDevice } from '../core/platform/compat';
 import { pushRecent, recordResult } from '../core/health/failover';
 import { STREAMHUB_EPG_URL, STREAMHUB_MOVIES_URL, STREAMHUB_SHOWS_URL, STREAMHUB_UPCOMING_URL } from '../core/catalog/sources';
@@ -67,6 +68,11 @@ interface StreamHubState extends ProfileData {
   error?: string;
   channels: Channel[];
   byId: Map<string, Channel>;
+  /** Catalog as loaded, before device / source filters (for switching sources on and off). */
+  raw: Channel[];
+  /** Channel sources switched off on this device. */
+  sourcesOff: string[];
+  setSourceOn(group: string, on: boolean): void;
   movies: Movie[];
   movieById: Map<string, Movie>;
   shows: Show[];
@@ -91,8 +97,8 @@ interface StreamHubState extends ProfileData {
 }
 
 function prepare(channels: Channel[], health: Record<string, StreamHealth>) {
-  const list = applyHealth(channelsForDevice(withoutBanned(channels), device), health);
-  return { channels: list, byId: new Map(list.map((c) => [c.id, c])) };
+  const list = applyHealth(channelsForDevice(withoutGroups(withoutBanned(channels), readJSON<string[]>('sources:off', [])), device), health);
+  return { channels: list, byId: new Map(list.map((c) => [c.id, c])), raw: channels };
 }
 
 const MOVIES_KEY = 'movies.v1.json';
@@ -177,6 +183,13 @@ export const useStreamHub = create<StreamHubState>((set, get) => ({
   progress: 'Starting',
   channels: [],
   byId: new Map(),
+  raw: [],
+  sourcesOff: readJSON<string[]>('sources:off', []),
+  setSourceOn(group, on) {
+    const off = on ? get().sourcesOff.filter((g) => g !== group) : [...new Set([...get().sourcesOff, group])];
+    writeJSON('sources:off', off);
+    set({ sourcesOff: off, ...prepare(get().raw, get().health) });
+  },
   movies: [],
   movieById: new Map(),
   epg: {},
