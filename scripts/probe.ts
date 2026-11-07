@@ -4,9 +4,9 @@
  * compare with the old check before the nightly job relies on it. Read only.
  */
 import type { Catalog } from '../src/core/types';
-import { validateStream } from '../src/core/playback/validate';
+import { nextUri, validateStream } from '../src/core/playback/validate';
 import { outcomeOf } from '../src/core/playback/health';
-import { Budget, makeGetBytes } from './lib/net';
+import { Budget, makeGetBytes, safeGet } from './lib/net';
 
 async function main() {
   const cat = (await (await fetch('https://raw.githubusercontent.com/LightSpirit91/streamhub-tv/catalog/catalog.json')).json()) as Catalog;
@@ -38,5 +38,26 @@ async function main() {
   console.log('Outcomes:', JSON.stringify(outcomes));
   console.log('Details:', JSON.stringify(reasons, null, 1));
   console.log('Examples:', JSON.stringify(examples, null, 1));
+
+  // What do "not video" answers actually look like?
+  const show = (b: Uint8Array) => JSON.stringify(new TextDecoder('latin1').decode(b.subarray(0, 120)));
+  const hex = (b: Uint8Array) => Buffer.from(b.subarray(0, 16)).toString('hex');
+  for (const u of ['http://stream.mcquack.net/48/index.m3u8', 'https://cdn.ntv.ru/ntv0/playlist.m3u8', 'https://cdn.ntv.ru/ntv1/playlist.m3u8']) {
+    console.log(`\n== ${u}`);
+    try {
+      let url = u;
+      for (let d = 0; d < 3; d++) {
+        const r = await safeGet(url, { Origin: 'https://lightspirit91.github.io' }, { maxBytes: d === 2 ? 4096 : 64_000 });
+        console.log(`depth ${d} status ${r.status} type ${r.type} enc ${r.headers['content-encoding'] ?? '-'} len ${r.bytes.length} hex ${hex(r.bytes)} text ${show(r.bytes)}`);
+        const t = new TextDecoder().decode(r.bytes);
+        if (/#EXT-X-KEY/.test(t)) console.log('  has EXT-X-KEY:', /#EXT-X-KEY:[^\n]*/.exec(t)?.[0].slice(0, 80));
+        const n = nextUri(t, r.finalUrl);
+        if (!n) break;
+        url = n.uri;
+      }
+    } catch (e) {
+      console.log('error', (e as Error).name, (e as Error).message);
+    }
+  }
 }
 main();
