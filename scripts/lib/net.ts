@@ -58,13 +58,18 @@ function once(url: string, headers: Record<string, string>, o: Required<Omit<Saf
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === 'https:' ? https : http;
-    const lookup: net.LookupFunction = (hostname, options, cb) => {
-      dns.lookup(hostname, { ...options, all: false }, (err, address, family) => {
-        if (err) return cb(err, '', 0);
-        if (!o.allowPrivate && isPrivate(String(address))) return cb(new UnsafeAddressError(`${hostname} resolves to a private address`), '', 0);
-        cb(null, address as string, family as number);
+    // Node may ask for one address or for all of them (happy eyeballs); either
+    // way every address is checked, and any private one refuses the host.
+    const lookup = ((hostname: string, options: dns.LookupOptions, cb: (...a: unknown[]) => void) => {
+      dns.lookup(hostname, { ...options, all: true }, (err, list) => {
+        if (err) return cb(err);
+        const addrs = list as dns.LookupAddress[];
+        if (!addrs.length) return cb(Object.assign(new Error(`no address for ${hostname}`), { code: 'ENOTFOUND' }));
+        if (!o.allowPrivate && addrs.some((a) => isPrivate(a.address))) return cb(new UnsafeAddressError(`${hostname} resolves to a private address`));
+        if (options.all) cb(null, addrs);
+        else cb(null, addrs[0].address, addrs[0].family);
       });
-    };
+    }) as unknown as net.LookupFunction;
     if (!o.allowPrivate && net.isIP(u.hostname.replace(/^\[|\]$/g, '')) && isPrivate(u.hostname.replace(/^\[|\]$/g, ''))) {
       return reject(new UnsafeAddressError('private address'));
     }
