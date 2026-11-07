@@ -194,6 +194,13 @@ export class OpenSubtitles {
     if (!this.token || this.now() - this.tokenAt > TOKEN_TTL_MS) await this.login();
   }
 
+  /** Search needs only the API key: no login, so a login problem never blocks it. */
+  private async anonymous(path: string, init: RequestInit = {}, stage: Stage = 'search-network'): Promise<Response> {
+    const res = await net(this.fetcher, `${DEFAULT_BASE}${path}`, { ...init, headers: this.headers(false) }, stage);
+    if (res.status === 429) throw new OsError({ kind: 'busy' });
+    return res;
+  }
+
   /** Authenticated call; on 401 the token is renewed once and the call repeated. */
   private async call(path: string, init: RequestInit = {}, stage: Stage = 'search-network', retried = false): Promise<Response> {
     await this.ensureToken();
@@ -208,7 +215,7 @@ export class OpenSubtitles {
 
   async search(q: SearchQuery): Promise<SubResult[]> {
     if (!imdbNum(q.imdbId) || !LANGS.includes(q.lang)) throw new OsError({ kind: 'notfound' });
-    const res = await this.call(searchPath(q));
+    const res = await this.anonymous(searchPath(q));
     if (!res.ok) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-network' });
     const j = await body<{ data?: unknown }>(res, 'search-json');
     if (j.data != null && !Array.isArray(j.data)) throw new OsError({ kind: 'upstream', status: res.status, stage: 'search-shape' });
@@ -220,7 +227,16 @@ export class OpenSubtitles {
   /** Downloads one subtitle file (uses one of today's downloads) and returns its text. */
   async download(fileId: number): Promise<{ text: string; remaining?: number; resetTime?: string }> {
     if (this.quota.remaining != null && this.quota.remaining <= 0) throw new OsError({ kind: 'quota', resetTime: this.quota.resetTime });
-    const res = await this.call('/download', { method: 'POST', body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) }, 'download-network');
+    const req = { method: 'POST', body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) };
+    let res: Response;
+    try {
+      res = await this.call('/download', req, 'download-network');
+    } catch (e) {
+      // Login refused: try once without logging in (OpenSubtitles may allow a few anonymous downloads).
+      if (!(e instanceof OsError) || e.info.kind !== 'auth') throw e;
+      res = await this.anonymous('/download', req, 'download-network');
+      if (res.status === 401 || res.status === 403) throw e;
+    }
     const j = (await res.json().catch(() => ({}))) as { link?: string; remaining?: number; reset_time_utc?: string; reset_time?: string; message?: string };
     const resetTime = j.reset_time_utc ?? j.reset_time;
     if (res.status === 406 || (res.ok && !j.link && (j.remaining ?? 1) <= 0)) {

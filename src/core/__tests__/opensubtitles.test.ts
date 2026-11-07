@@ -37,43 +37,58 @@ describe('OpenSubtitles API rules', () => {
 });
 
 describe('OpenSubtitles client', () => {
-  it('logs in once, uses base_url, sends Api-Key and a named User-Agent', async () => {
-    const { f, calls } = fake((c) =>
-      c.url.endsWith('/login') ? { status: 200, body: { token: 'T1', base_url: 'vip-api.example.com', user: { remaining_downloads: 20 } } } : { status: 200, body: { data: [hit('ru', 7, 3)] } },
-    );
+  const FILE = '1\n00:00:01,000 --> 00:00:02,000\nHola\n';
+
+  it('searches with the API key only (no login), named User-Agent', async () => {
+    const { f, calls } = fake(() => ({ status: 200, body: { data: [hit('ru', 7, 3)] } }));
     const os = new OpenSubtitles(CREDS, f);
-    await os.search({ imdbId: 'tt1', lang: 'ru' });
-    await os.search({ imdbId: 'tt2', lang: 'ru' });
-    expect(calls.filter((c) => c.url.endsWith('/login'))).toHaveLength(1);
-    expect(calls[1].url.startsWith('https://vip-api.example.com/api/v1/subtitles?')).toBe(true);
-    expect(calls[1].headers['Api-Key']).toBe('KEY-SECRET');
-    expect(calls[1].headers['User-Agent']).toBe('StreamHub v1.0');
-    expect(calls[1].headers.Authorization).toBe('Bearer T1');
-    expect(os.quota.remaining).toBe(20);
+    expect((await os.search({ imdbId: 'tt1', lang: 'ru' })).map((r) => r.fileId)).toEqual([7]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url.startsWith('https://api.opensubtitles.com/api/v1/subtitles?')).toBe(true);
+    expect(calls[0].headers['Api-Key']).toBe('KEY-SECRET');
+    expect(calls[0].headers['User-Agent']).toBe('StreamHub v1.0');
+    expect(calls[0].headers.Authorization).toBeUndefined();
   });
 
-  it('renews an expired token once on 401', async () => {
+  it('downloads: logs in once, uses base_url, renews an expired token once on 401', async () => {
     let logins = 0;
     const { f, calls } = fake((c) => {
-      if (c.url.endsWith('/login')) return { status: 200, body: { token: `T${++logins}` } };
-      return c.headers.Authorization === 'Bearer T1' ? { status: 401 } : { status: 200, body: { data: [] } };
+      if (c.url.endsWith('/login')) return { status: 200, body: { token: `T${++logins}`, base_url: 'vip-api.example.com', user: { remaining_downloads: 20 } } };
+      if (c.url.endsWith('/download')) return c.headers.Authorization === 'Bearer T1' && logins === 1 && calls.filter((x) => x.url.endsWith('/download')).length === 1 ? { status: 401 } : { status: 200, body: { link: 'https://dl.example/f.srt', remaining: 19 } };
+      return { status: 200, text: FILE };
     });
     const os = new OpenSubtitles(CREDS, f);
-    expect(await os.search({ imdbId: '5', lang: 'en' })).toEqual([]);
+    expect((await os.download(1)).text).toContain('Hola');
     expect(logins).toBe(2);
-    expect(calls.at(-1)!.headers.Authorization).toBe('Bearer T2');
+    expect(calls.find((c) => c.url.endsWith('/download'))!.url.startsWith('https://vip-api.example.com/api/v1/')).toBe(true);
+    await os.download(2);
+    expect(logins).toBe(2); // token reused
   });
 
-  it('stops after a refused login and waits before trying again (account lockout)', async () => {
+  it('refused login: waits before logging in again, tries the download once without login', async () => {
     let t = 0;
-    const { f, calls } = fake(() => ({ status: 401, body: { message: 'invalid username/password' } }));
+    const { f, calls } = fake((c) => {
+      if (c.url.endsWith('/login')) return { status: 401, body: { message: 'invalid username/password' } };
+      if (c.url.endsWith('/download')) return { status: 401, body: {} };
+      return { status: 200, text: FILE };
+    });
     const os = new OpenSubtitles(CREDS, f, () => t);
-    await expect(os.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { kind: 'auth' } });
-    await expect(os.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { kind: 'auth' } });
-    expect(calls).toHaveLength(1); // second attempt never reached OpenSubtitles
+    await expect(os.download(5)).rejects.toMatchObject({ info: { kind: 'auth', status: 401 } });
+    expect(calls.map((c) => c.url.split('/').pop())).toEqual(['login', 'download']);
+    await expect(os.download(5)).rejects.toMatchObject({ info: { kind: 'auth' } });
+    expect(calls.filter((c) => c.url.endsWith('/login'))).toHaveLength(1); // no second login during the pause
     t = OpenSubtitles.AUTH_COOLDOWN_MS + 1;
-    await expect(os.search({ imdbId: '5', lang: 'en' })).rejects.toBeInstanceOf(OsError);
-    expect(calls).toHaveLength(2);
+    await expect(os.download(5)).rejects.toBeInstanceOf(OsError);
+    expect(calls.filter((c) => c.url.endsWith('/login'))).toHaveLength(2);
+  });
+
+  it('refused login but anonymous download allowed: still works', async () => {
+    const { f } = fake((c) => {
+      if (c.url.endsWith('/login')) return { status: 401, body: {} };
+      if (c.url.endsWith('/download')) return { status: 200, body: { link: 'https://dl.example/f.srt', remaining: 4 } };
+      return { status: 200, text: FILE };
+    });
+    expect((await new OpenSubtitles(CREDS, f).download(9)).remaining).toBe(4);
   });
 
   it('downloads, tracks the daily allowance, and reports when it is used up', async () => {
@@ -85,7 +100,7 @@ describe('OpenSubtitles client', () => {
         remaining--;
         return { status: 200, body: { link: 'https://dl.example/file.srt', remaining, reset_time_utc: '2026-11-08T00:00:00Z' } };
       }
-      return { status: 200, text: '1\n00:00:01,000 --> 00:00:02,000\nHola\n' };
+      return { status: 200, text: FILE };
     });
     const os = new OpenSubtitles(CREDS, f);
     const r = await os.download(42);
@@ -132,9 +147,11 @@ describe('subtitle backend on Cloudflare (fixes the 500)', () => {
 
   it('turns network errors, non-JSON replies and odd shapes into labelled errors', async () => {
     const down = new OpenSubtitles(CREDS, async () => { throw new TypeError('network down'); });
-    await expect(down.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { kind: 'upstream', stage: 'login-network' } });
+    await expect(down.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { kind: 'upstream', stage: 'search-network' } });
+    await expect(down.download(1)).rejects.toMatchObject({ info: { kind: 'upstream', stage: 'login-network' } });
     const html = new OpenSubtitles(CREDS, async () => new Response('<html>maintenance</html>', { status: 200 }));
-    await expect(html.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { stage: 'login-json' } });
+    await expect(html.search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { stage: 'search-json' } });
+    await expect(html.download(1)).rejects.toMatchObject({ info: { stage: 'login-json' } });
     const { f } = fake((c) => (c.url.endsWith('/login') ? { status: 200, body: { token: 'T' } } : { status: 200, body: { data: { not: 'a list' } } }));
     await expect(new OpenSubtitles(CREDS, f).search({ imdbId: '5', lang: 'en' })).rejects.toMatchObject({ info: { stage: 'search-shape' } });
     const { f: f2 } = fake((c) => (c.url.endsWith('/login') ? { status: 200, body: { token: 'T' } } : { status: 200, body: { data: [null, { attributes: { language: 'en', files: 'x' } }, hit('en', 4, 2)] } }));
